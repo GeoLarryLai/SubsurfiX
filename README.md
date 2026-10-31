@@ -2,7 +2,7 @@
 
 # SubsurfiX
 
-[![PyPI version](https://img.shields.io/pypi/v/subsurfix.svg)](https://pypi.org/project/subsurfix/) [![pepy downloads](https://static.pepy.tech/badge/subsurfix)](https://pepy.tech/project/subsurfix) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.ZENODO_CONCEPT_DOI.svg)](https://doi.org/10.5281/zenodo.ZENODO_CONCEPT_DOI)
+[![PyPI version](https://img.shields.io/pypi/v/subsurfix.svg)](https://pypi.org/project/subsurfix/) [![pepy downloads](https://static.pepy.tech/badge/subsurfix)](https://pepy.tech/project/subsurfix) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23832007.svg)](https://doi.org/10.5281/zenodo.23832007)
 
 v0.1.0
 
@@ -32,7 +32,7 @@ Tests: `cargo test --workspace`, then `maturin develop -r --features testing` an
 
 ## Citation
 
-Lai, L.S.-H. (2026) SubsurfiX. *Zenodo*, [https://doi.org/10.5281/zenodo.ZENODO_CONCEPT_DOI](https://doi.org/10.5281/zenodo.ZENODO_CONCEPT_DOI)
+Lai, L.S.-H. (2026) SubsurfiX. *Zenodo*, [https://doi.org/10.5281/zenodo.23832007](https://doi.org/10.5281/zenodo.23832007)
 
 ![3D porosity model built from 60 Kansas wells](image/hero_3d_porosity_model.png)
 
