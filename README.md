@@ -1,8 +1,8 @@
-<p align="center"><img src="image/logo.png" alt="SubsurfiX" width="160"></p>
+<p align="center"><img src="image/logo.png" alt="SubsurfiX" width="240"></p>
 
 # SubsurfiX
 
-[![PyPI version](https://img.shields.io/pypi/v/subsurfix.svg)](https://pypi.org/project/subsurfix/) [![pepy downloads](https://static.pepy.tech/badge/subsurfix)](https://pepy.tech/project/subsurfix) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23832007.svg)](https://doi.org/10.5281/zenodo.23832007)
+[![PyPI version](https://img.shields.io/pypi/v/subsurfix.svg)](https://pypi.org/project/subsurfix/) [![pepy downloads](https://static.pepy.tech/badge/subsurfix)](https://pepy.tech/project/subsurfix) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23832007.svg)](https://doi.org/10.5281/zenodo.23832007) [![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue.svg)](./LICENSE)
 
 v0.1.0
 
@@ -87,6 +87,4 @@ Log workflow: [Gonzalez et al. (2023)](https://www.tgs.com/technical-library/mac
 Flow and heat: [open-DARTS](https://gitlab.com/open-darts/open-darts), [OpenGeoSys](https://www.opengeosys.org),
 [OPM](https://opm-project.org). Data credits are in `NOTICE`.
 
-## License
-
-Copyright (C) 2026 Larry Syu-Heng Lai. AGPL-3.0-or-later; see `LICENSE`.
+Third-party notices: [`NOTICE`](NOTICE).
