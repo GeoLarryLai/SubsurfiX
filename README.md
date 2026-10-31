@@ -9,8 +9,8 @@
 From a folder of well logs to a checked, correlated log set and a 3D property model you can run flow and heat
 simulations on. Rust engine, driven from Python or the command line.
 
-Status: 0.1.0, early-stage research software (source only, no prebuilt wheels). APIs may change; check results
-before use.
+Status: 0.1.0, early-stage research software. macOS arm64 wheels are on PyPI; other platforms build from the sdist
+(needs Rust, cmake and a C++ compiler). APIs may change; check results before use.
 
 ## What it does
 
