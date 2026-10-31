@@ -32,7 +32,9 @@ use crate::error::{SxError, SxResult};
 use crate::fill::features::feature_names;
 use crate::fill::lgbm::{lgbm_seed, LgbmParams};
 use crate::fill::sequential::{train_and_fill, LgbmFactory, TrainedModels};
-use crate::fill::{fill_report_csv, fill_summary_csv, logs_filled_to_batch, FillInputs, LOGS_FILLED_TAG};
+use crate::fill::{
+    fill_report_csv, fill_summary_csv, logs_filled_to_batch, FillInputs, LOGS_FILLED_TAG,
+};
 use crate::io::atomic::io_error;
 use crate::io::products::{
     geometry_batch, logs_batch, tops_input_batch, wells_batch, LOGS_RAW_TAG,
@@ -40,8 +42,8 @@ use crate::io::products::{
 use crate::io::{csv, glossary, las, parquet};
 use crate::neighbors::{build_neighbor_curves, neighbor_curves_to_batch};
 use crate::normalize::{
-    logs_norm_batch, norm_anchors_batch, norm_report_batch, run_normalize_stage, NormalizeInput,
-    QC_FLAGS_POST_TAG,
+    logs_norm_batch, norm_anchors_batch, norm_report_batch, nphi_offset_batch, run_normalize_stage,
+    NormalizeInput, QC_FLAGS_POST_TAG,
 };
 use crate::qc::{self, QcInput, LOGS_QC_TAG, QC_FLAGS_TAG};
 use crate::refresh::{self, RefreshInputs, LOGS_FINAL_TAG};
@@ -215,7 +217,11 @@ fn run_qc(ctx: &Ctx<'_>) -> SxResult<StageRun> {
     // LAS match report: ingest's conflicts and overrides, published with the QC reports.
     let las_match = p(LAS_MATCH);
     let text = std::fs::read_to_string(&las_match).map_err(|e| io_error(&las_match, e))?;
-    let n_left_out = text.lines().skip(1).filter(|l| l.contains(",excluded,")).count();
+    let n_left_out = text
+        .lines()
+        .skip(1)
+        .filter(|l| l.contains(",excluded,"))
+        .count();
     if n_left_out > 0 {
         tracing::warn!(
             n_files = n_left_out,
@@ -285,6 +291,7 @@ fn run_normalize(ctx: &Ctx<'_>) -> SxResult<StageRun> {
     )?;
     w.csv(NORM_ANCHORS, &norm_anchors_batch(&out.anchors)?)?;
     w.csv(NORM_REPORT, &norm_report_batch(&out.report)?)?;
+    w.csv(NPHI_OFFSET_REPORT, &nphi_offset_batch(&out.nphi_offset)?)?;
     Ok(w.done())
 }
 

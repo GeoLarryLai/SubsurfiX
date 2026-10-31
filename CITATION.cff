@@ -10,7 +10,7 @@ authors:
     orcid: "https://orcid.org/0000-0003-4589-9729"
 repository-code: "https://github.com/GeoLarryLai/SubsurfiX"
 license: AGPL-3.0-or-later
-version: "0.1.0"
+version: "0.1.1"
 date-released: "2026-10-31"
 keywords:
   - well logs

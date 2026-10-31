@@ -307,7 +307,7 @@ impl Default for QcConfig {
             pileup_min_len: 20,
             pileup_min_share: 0.01,
             pileup_rel_tol: 1e-8,
-            badhole_logs: vec!["RHOB".to_string(), "PEF".to_string()],
+            badhole_logs: vec!["RHOB".to_string(), "PEF".to_string(), "NPHI".to_string()],
             cal_open_min_in: 5.0,
             cal_undergauge_in: 1.0,
             cal_washout_in: 2.0,

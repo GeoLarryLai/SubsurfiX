@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Larry Syu-Heng Lai
-"""Write the example notebooks (run with nbconvert --execute afterwards)."""
+"""Write example notebooks 01-08 (run with nbconvert --execute afterwards). 09 is edited by hand;
+10 and 12 come from _build_nb10.py and _build_nb12.py."""
 import nbformat as nbf
 from pathlib import Path
 
@@ -424,9 +425,7 @@ print("geometry identical:", np.allclose(back.zcorn, cpg.zcorn) and np.allclose(
 print(text[:300])""",
 ]
 
-for old in HERE.glob("[0-9][0-9]_*.ipynb"):
-    if old.name not in books:
-        old.unlink()
-for name, cells in books.items():
-    nbf.write(nb(cells), HERE / name)
-print("wrote", len(books))
+if __name__ == "__main__":
+    for name, cells in books.items():
+        nbf.write(nb(cells), HERE / name)
+    print("wrote", len(books))

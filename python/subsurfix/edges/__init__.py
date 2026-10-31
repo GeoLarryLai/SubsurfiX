@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import os
-try:
-    import tomllib
-except ModuleNotFoundError:  # Python 3.10
-    import tomli as tomllib
+import tomllib
 from collections.abc import Mapping
 from pathlib import Path
 from typing import NamedTuple

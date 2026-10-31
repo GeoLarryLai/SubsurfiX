@@ -47,6 +47,12 @@ pub enum Command {
         #[arg(long)]
         threads: Option<usize>,
     },
+    /// Evaluate the field-wide NPHI offset (needs `qc`); normalize applies it on the next run.
+    NphiOffset {
+        /// Project file to load.
+        #[arg(long, default_value = "project.toml")]
+        config: PathBuf,
+    },
     /// List stages and whether their manifest entries and outputs exist.
     Status {
         /// Project file whose folder is listed. The file is not parsed.

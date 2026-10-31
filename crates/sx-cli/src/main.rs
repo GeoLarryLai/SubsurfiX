@@ -5,6 +5,7 @@
 mod cli;
 mod exit;
 mod init;
+mod nphi_offset;
 mod pipeline_seam;
 mod run;
 mod stages;
@@ -56,6 +57,7 @@ fn dispatch(cli: &Cli) -> SxResult<()> {
             threads,
         } => run::execute(config, from.as_deref(), to.as_deref(), *force, *threads),
         Command::Status { config } => status::execute(config),
+        Command::NphiOffset { config } => nphi_offset::execute(config),
         Command::Version => {
             println!("subsurfix {}", env!("CARGO_PKG_VERSION"));
             Ok(())

@@ -41,5 +41,5 @@ def test_nad27_without_grid_is_config_error() -> None:
 
 def test_missing_pyproj(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(sys.modules, "pyproj", None)
-    with pytest.raises(MissingDependencyError):
+    with pytest.raises(MissingDependencyError, match=r"pip install pyproj"):
         reproject_xy([0.0], [0.0], "EPSG:4326", "EPSG:32614")

@@ -29,6 +29,7 @@ pub fn validate(cfg: &ProjectConfig) -> SxResult<()> {
     validate_align(cfg)?;
     validate_dtw(cfg)?;
     validate_normalize(cfg)?;
+    validate_nphi_offset(cfg)?;
     validate_neighbors(cfg)?;
     validate_fill(cfg)?;
     validate_lightgbm(cfg)?;
@@ -57,6 +58,12 @@ fn validate_propagation(cfg: &ProjectConfig) -> SxResult<()> {
     check_count("propagation.qrf_trees", p.qrf_trees)?;
     check_count("propagation.qrf_min_leaf", p.qrf_min_leaf)?;
     check_count("propagation.lgbm_iterations", p.lgbm_iterations)?;
+    if p.conformal_folds < 2 {
+        return Err(bad(
+            "propagation.conformal_folds",
+            format!("must be at least 2 (got {})", p.conformal_folds),
+        ));
+    }
     Ok(())
 }
 
@@ -744,6 +751,25 @@ fn validate_span(prefix: &str, span: &SpanParams) -> SxResult<()> {
     Ok(())
 }
 
+fn validate_nphi_offset(cfg: &ProjectConfig) -> SxResult<()> {
+    let c = &cfg.nphi_offset;
+    check_finite("nphi_offset.gr_max", c.gr_max)?;
+    check_range("nphi_offset.phi_max", c.phi_max, -0.1, 0.5)?;
+    check_finite("nphi_offset.pef_min", c.pef_min)?;
+    check_gt("nphi_offset.pef_max", c.pef_max - c.pef_min, 0.0)?;
+    check_gt("nphi_offset.rho_matrix", c.rho_matrix - c.rho_fluid, 0.0)?;
+    check_count("nphi_offset.min_well_samples", c.min_well_samples)?;
+    check_count("nphi_offset.min_wells", c.min_wells)?;
+    check_count("nphi_offset.n_boot", c.n_boot)?;
+    check_range("nphi_offset.ci_level", c.ci_level, 0.5, 0.999)?;
+    check_gt("nphi_offset.outlier_limit", c.outlier_limit, 0.0)?;
+    check_gt("nphi_offset.fit_phi_max", c.fit_phi_max - c.phi_max, 0.0)?;
+    check_gt("nphi_offset.fit_bin", c.fit_bin, 0.0)?;
+    check_gt("nphi_offset.slope_tol", c.slope_tol, 0.0)?;
+    check_count("nphi_offset.n_boot_slope", c.n_boot_slope)?;
+    Ok(())
+}
+
 fn validate_normalize(cfg: &ProjectConfig) -> SxResult<()> {
     let normalize = &cfg.normalize;
     check_count("normalize.ref_k", normalize.ref_k)?;
@@ -751,6 +777,29 @@ fn validate_normalize(cfg: &ProjectConfig) -> SxResult<()> {
     check_count("normalize.pick_min_count", normalize.pick_min_count)?;
     check_count("normalize.depth_bins", normalize.depth_bins)?;
     check_count("normalize.depth_candidates", normalize.depth_candidates)?;
+    check_count(
+        "normalize.nphi_offset_min_count",
+        normalize.nphi_offset_min_count,
+    )?;
+    check_gt(
+        "normalize.nphi_offset_limit",
+        normalize.nphi_offset_limit,
+        0.0,
+    )?;
+    check_range("normalize.nphi_shift", normalize.nphi_shift, -0.2, 0.2)?;
+    check_finite("normalize.nphi_offset_gr_max", normalize.nphi_offset_gr_max)?;
+    check_finite(
+        "normalize.nphi_offset_rhob_min",
+        normalize.nphi_offset_rhob_min,
+    )?;
+    rel_f64(
+        "normalize.nphi_offset_rho_matrix",
+        normalize.nphi_offset_rho_matrix,
+        ">",
+        "normalize.nphi_offset_rho_fluid",
+        normalize.nphi_offset_rho_fluid,
+        normalize.nphi_offset_rho_matrix > normalize.nphi_offset_rho_fluid,
+    )?;
     check_one_of("normalize.scope", &normalize.scope, &["layer", "all"])?;
     check_ge("normalize.ref_power", normalize.ref_power, 0.0)?;
     check_gt(

@@ -15,6 +15,7 @@ mod fill;
 mod ingest;
 mod neighbors;
 mod normalize;
+mod nphi_offset;
 mod project;
 mod propagation;
 mod qc;
@@ -34,6 +35,7 @@ pub use fill::{FillConfig, FillLadderConfig, FillLightgbmConfig};
 pub use ingest::IngestConfig;
 pub use neighbors::NeighborsConfig;
 pub use normalize::NormalizeConfig;
+pub use nphi_offset::NphiOffsetConfig;
 pub use project::{
     from_toml_str, load_project, resolve_path, ProjectConfig, ProjectSection, RuntimeConfig,
 };

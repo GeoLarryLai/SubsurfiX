@@ -456,6 +456,7 @@ fn mask_positions(
 /// `logs_norm`; errors of normalization, neighbor curves and fill; `Io` from
 /// the writes.
 pub fn score_holdout(project_dir: &Path, cfg: &ProjectConfig) -> SxResult<HoldoutReport> {
+    let cfg = &crate::nphi_offset::effective_config(project_dir, cfg)?;
     let start = Instant::now();
     let p = |rel: &str| project_dir.join(rel);
     let (headers, _) = read_wells(&p(WELLS))?;

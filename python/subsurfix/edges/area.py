@@ -236,7 +236,7 @@ def _read_shapefile(
         import shapefile
     except ImportError as exc:
         raise MissingDependencyError(
-            "shapefile is needed to read shapefiles; install subsurfix[gis]"
+            "pyshp (module shapefile) is needed to read shapefiles; it is a regular subsurfix dependency, so run `pip install pyshp` or reinstall subsurfix"
         ) from exc
     try:
         reader = shapefile.Reader(str(path))
@@ -392,7 +392,7 @@ def _read_gpkg(
         import shapely
     except ImportError as exc:
         raise MissingDependencyError(
-            "shapely is needed to read GeoPackage geometries; install subsurfix[gis]"
+            "shapely is needed to read GeoPackage geometries; it is a regular subsurfix dependency, so run `pip install shapely` or reinstall subsurfix"
         ) from exc
     try:
         connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)

@@ -107,7 +107,7 @@ type Connections<'py> = (
     Bound<'py, PyArray1<f64>>,
 );
 
-fn wells_of(list: &Bound<'_, PyList>) -> PyResult<Vec<FlowWell>> {
+pub(crate) fn wells_of(list: &Bound<'_, PyList>) -> PyResult<Vec<FlowWell>> {
     let mut out = Vec::new();
     for item in list.iter() {
         let d = item
@@ -246,7 +246,7 @@ fn fixed_of(v: Option<&Bound<'_, PyList>>) -> PyResult<Vec<FixedPressure>> {
     Ok(out)
 }
 
-fn corey_of(d: Option<&Bound<'_, PyDict>>) -> PyResult<Corey> {
+pub(crate) fn corey_of(d: Option<&Bound<'_, PyDict>>) -> PyResult<Corey> {
     let mut c = Corey::default();
     if let Some(d) = d {
         for (k, v) in d.iter() {
@@ -268,7 +268,7 @@ fn corey_of(d: Option<&Bound<'_, PyDict>>) -> PyResult<Corey> {
     Ok(c)
 }
 
-fn physics_of(d: Option<&Bound<'_, PyDict>>) -> PyResult<Physics> {
+pub(crate) fn physics_of(d: Option<&Bound<'_, PyDict>>) -> PyResult<Physics> {
     let mut ph = Physics::default();
     let (mut kind, mut pd, mut lambda, mut alpha, mut n) = (None::<String>, 0.0, 2.0, 1e-4, 2.0);
     if let Some(d) = d {
@@ -308,14 +308,14 @@ fn physics_of(d: Option<&Bound<'_, PyDict>>) -> PyResult<Physics> {
     Ok(ph)
 }
 
-fn rows2<'py>(py: Python<'py>, rows: &[Vec<f64>]) -> PyResult<Bound<'py, PyArray2<f64>>> {
+pub(crate) fn rows2<'py>(py: Python<'py>, rows: &[Vec<f64>]) -> PyResult<Bound<'py, PyArray2<f64>>> {
     PyArray2::from_vec2(py, rows).map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
 /// Flow model: cells, pore volumes and TPFA transmissibilities.
 #[pyclass(name = "FlowModel", module = "subsurfix._native")]
 pub struct PyFlowModel {
-    m: FlowModel,
+    pub(crate) m: FlowModel,
     corners: Vec<[[f64; 3]; 8]>,
 }
 
@@ -458,7 +458,8 @@ impl PyFlowModel {
     /// p, flux, boundary_flux, upwind_iterations, warnings and wells (bhp, rate, cell_rates, wi).
     /// `boundary_mobility`: mobility of fluid entering through `fixed` boundaries
     /// (default: the cell mobility).
-    #[pyo3(signature = (mobility, wells, fixed=None, inj_mobility=None, boundary_mobility=None))]
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (mobility, wells, fixed=None, inj_mobility=None, boundary_mobility=None, n_threads=None))]
     fn solve_pressure<'py>(
         &self,
         py: Python<'py>,
@@ -467,12 +468,15 @@ impl PyFlowModel {
         fixed: Option<&Bound<'_, PyList>>,
         inj_mobility: Option<f64>,
         boundary_mobility: Option<f64>,
+        n_threads: Option<usize>,
     ) -> PyResult<Bound<'py, PyDict>> {
         let mob = mobility.as_slice()?;
         let inj = inj_mobility.unwrap_or_else(|| mob.first().copied().unwrap_or(1.0));
         let ws = wells_of(wells)?;
         let o = flow::PressureOptions { boundary_inflow_mobility: boundary_mobility, ..Default::default() };
-        let sol = flow::solve_pressure_with(&self.m, mob, inj, &ws, &fixed_of(fixed)?, &o).map_err(to_py_err)?;
+        let fx = fixed_of(fixed)?;
+        let sol = flow::with_threads(n_threads, || flow::solve_pressure_with(&self.m, mob, inj, &ws, &fx, &o))
+            .map_err(to_py_err)?;
         let d = PyDict::new(py);
         d.set_item("p", PyArray1::from_slice(py, &sol.p))?;
         d.set_item("flux", PyArray1::from_slice(py, &sol.flux))?;
@@ -520,7 +524,7 @@ impl PyFlowModel {
     /// "n_rejected", "p", "flux"}. `dt_change` turns on adaptive stepping:
     /// the step (starting at `dt_init`, default `dt_max`) is scaled so the
     /// largest temperature change per step is about `dt_change`.
-    #[pyo3(signature = (mobility, wells, well_temp, t0, times, fixed=None, fixed_temp=None, fixed_t=None, props=None, dt_max=86400.0, inj_mobility=None, dt_init=None, dt_change=None, heat_flux=None))]
+    #[pyo3(signature = (mobility, wells, well_temp, t0, times, fixed=None, fixed_temp=None, fixed_t=None, props=None, dt_max=86400.0, inj_mobility=None, dt_init=None, dt_change=None, heat_flux=None, n_threads=None, report_every=1, snapshot_dir=None))]
     #[allow(clippy::too_many_arguments)]
     fn run_heat<'py>(
         &self,
@@ -539,12 +543,15 @@ impl PyFlowModel {
         dt_init: Option<f64>,
         dt_change: Option<f64>,
         heat_flux: Option<Vec<std::collections::BTreeMap<String, f64>>>,
+        n_threads: Option<usize>,
+        report_every: usize,
+        snapshot_dir: Option<String>,
     ) -> PyResult<Bound<'py, PyDict>> {
         let mob = mobility.as_slice()?;
         let inj = inj_mobility.unwrap_or_else(|| mob.first().copied().unwrap_or(1.0));
         let ws = wells_of(wells)?;
         let fx = fixed_of(fixed)?;
-        let sol = flow::solve_pressure(&self.m, mob, inj, &ws, &fx).map_err(to_py_err)?;
+        let sol = flow::with_threads(n_threads, || flow::solve_pressure(&self.m, mob, inj, &ws, &fx)).map_err(to_py_err)?;
         let mut tp = flow::ThermalProps::default();
         let mut props = props.unwrap_or_default();
         match (props.remove("water_p"), props.remove("water_t_k")) {
@@ -601,8 +608,13 @@ impl PyFlowModel {
             dt_max,
             control: dt_change.map(|ch| flow::StepControl::new(dt_init.unwrap_or(dt_max), ch)),
         };
-        let r = flow::run_heat(&self.m, &sol, &ws, &fx, &tp, &inp).map_err(to_py_err)?;
+        let n_rep = inp.times.len();
+        let r = with_report(report_every, snapshot_dir.as_deref(), |rep| {
+            flow::with_threads(n_threads, || flow::run_heat_with(&self.m, &sol, &ws, &fx, &tp, &inp, rep))
+        })
+        .map_err(to_py_err)?;
         let d = PyDict::new(py);
+        set_report_keys(&d, report_every, snapshot_dir.as_deref(), n_rep)?;
         d.set_item("times", r.times.clone())?;
         d.set_item("temperature", rows2(py, &r.temperature)?)?;
         d.set_item("energy_change", r.energy_change.clone())?;
@@ -747,7 +759,7 @@ impl PyFlowModel {
     /// and "ref_depth" (m). Returns {"times", "sw", "p" (n_times, n_cells),
     /// "bhp", "water_rate", "oil_rate" (n_times, n_wells), "water_in_place",
     /// "water_net_in", "water_clamp_loss", "oil_in_place", "oil_net_in", "n_steps"}.
-    #[pyo3(signature = (wells, sw0, p0, times, fixed=None, corey=None, physics=None, cfl=0.5, max_dt=f64::INFINITY, boundary_fw=1.0, ds_target=f64::INFINITY, dp_target=f64::INFINITY))]
+    #[pyo3(signature = (wells, sw0, p0, times, fixed=None, corey=None, physics=None, cfl=0.5, max_dt=f64::INFINITY, boundary_fw=1.0, ds_target=f64::INFINITY, dp_target=f64::INFINITY, n_threads=None, report_every=1, snapshot_dir=None))]
     #[allow(clippy::too_many_arguments)]
     fn run_two_phase<'py>(
         &self,
@@ -764,6 +776,9 @@ impl PyFlowModel {
         boundary_fw: f64,
         ds_target: f64,
         dp_target: f64,
+        n_threads: Option<usize>,
+        report_every: usize,
+        snapshot_dir: Option<String>,
     ) -> PyResult<Bound<'py, PyDict>> {
         let ws = wells_of(wells)?;
         let c = corey_of(corey)?;
@@ -773,7 +788,8 @@ impl PyFlowModel {
         let m = &self.m;
         let r = py
             .detach(|| {
-                flow::run_two_phase(
+                with_report(report_every, snapshot_dir.as_deref(), |rep| {
+                flow::with_threads(n_threads, || flow::run_two_phase_with(
                     m,
                     &ws,
                     &fx,
@@ -789,10 +805,13 @@ impl PyFlowModel {
                         ds_target,
                         dp_target,
                     },
-                )
+                    rep,
+                ))
+                })
             })
             .map_err(to_py_err)?;
         let d = PyDict::new(py);
+        set_report_keys(&d, report_every, snapshot_dir.as_deref(), times.len())?;
         d.set_item("times", r.times)?;
         d.set_item("sw", rows2(py, &r.sw)?)?;
         d.set_item("p", rows2(py, &r.p)?)?;
@@ -874,4 +893,45 @@ pub fn peaceman_wi(kx: f64, ky: f64, dx: f64, dy: f64, dz: f64, rw: f64, skin: f
 #[pyo3(signature = (xd, td, corey=None))]
 pub fn buckley_leverett(xd: f64, td: f64, corey: Option<&Bound<'_, PyDict>>) -> PyResult<f64> {
     Ok(flow::analytic::buckley_leverett(&corey_of(corey)?, xd, td))
+}
+
+/// Run `f` with report options built from `report_every` and `snapshot_dir`
+/// (fields streamed to `<dir>/<field>_<index:05>.npy` and not kept in memory).
+fn with_report<R>(
+    every: usize,
+    dir: Option<&str>,
+    f: impl FnOnce(&mut flow::ReportOptions<'_>) -> sx_core::SxResult<R>,
+) -> sx_core::SxResult<R> {
+    match dir {
+        None => f(&mut flow::ReportOptions { every, ..Default::default() }),
+        Some(dir) => {
+            let mut sink = flow::NpyDirSink::new(dir)?;
+            let mut w = |s: &flow::Snapshot<'_>| sink.write(s);
+            f(&mut flow::ReportOptions { every, in_memory: false, sink: Some(&mut w) })
+        }
+    }
+}
+
+/// Add "report_index" (kept report positions) when reports are decimated or streamed.
+fn set_report_keys(d: &Bound<'_, PyDict>, every: usize, dir: Option<&str>, n: usize) -> PyResult<()> {
+    if every > 1 || dir.is_some() {
+        let o = flow::ReportOptions { every, ..Default::default() };
+        d.set_item("report_index", o.kept(n))?;
+    }
+    if let Some(dir) = dir {
+        d.set_item("snapshot_dir", dir)?;
+    }
+    Ok(())
+}
+
+/// Set the default worker-thread count of the flow solvers (0 = all cores).
+#[pyfunction]
+pub fn set_flow_threads(n: usize) {
+    flow::set_num_threads(n);
+}
+
+/// Current default worker-thread count of the flow solvers.
+#[pyfunction]
+pub fn flow_threads() -> usize {
+    flow::num_threads()
 }

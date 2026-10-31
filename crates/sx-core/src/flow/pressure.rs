@@ -2,17 +2,13 @@
 // Copyright (C) 2026 Larry Syu-Heng Lai
 //! Incompressible TPFA pressure solve with Peaceman wells.
 
-use std::collections::BTreeMap;
 
-use faer::dyn_stack::{MemBuffer, MemStack, StackReq};
-use faer::linalg::cholesky::llt::factor::LltRegularization;
-use faer::sparse::linalg::cholesky::{
-    factorize_symbolic_cholesky, CholeskySymbolicParams, SymmetricOrdering,
-};
-use faer::sparse::{SparseColMat, Triplet};
-use faer::{Conj, MatMut, Par, Side};
+use std::cell::RefCell;
+
+use rayon::prelude::*;
 
 use super::model::FlowModel;
+use super::solver::{par_loops, with_threads, SpdCache, SpdEntries, PAR_MIN_LEN};
 use crate::error::{SxError, SxResult};
 
 /// Injector or producer.
@@ -194,28 +190,37 @@ pub const UPWIND_MAX_ITER: usize = 30;
 /// faces do not flip back and forth between iterations.
 pub(super) fn upwind_face_mobility(model: &FlowModel, mobility: &[f64], p: Option<&[f64]>) -> Vec<f64> {
     let mean = |a: usize, b: usize| 0.5 * (mobility[a] + mobility[b]);
+    let conns = &model.connections;
+    let par = par_loops(conns.len());
     let Some(p) = p else {
-        return model.connections.iter().map(|c| mean(c.a, c.b)).collect();
+        return if par {
+            conns.par_iter().with_min_len(PAR_MIN_LEN).map(|c| mean(c.a, c.b)).collect()
+        } else {
+            conns.iter().map(|c| mean(c.a, c.b)).collect()
+        };
     };
-    let scale = model
-        .connections
-        .iter()
-        .map(|c| (p[c.a] - p[c.b]).abs())
-        .fold(0.0, f64::max);
-    model
-        .connections
-        .iter()
-        .map(|c| {
-            let dp = p[c.a] - p[c.b];
-            if dp.abs() <= 1e-9 * scale {
-                mean(c.a, c.b)
-            } else if dp > 0.0 {
-                mobility[c.a]
-            } else {
-                mobility[c.b]
-            }
-        })
-        .collect()
+    let dpabs = |c: &super::model::Connection| (p[c.a] - p[c.b]).abs();
+    // Max is exact in any order.
+    let scale = if par {
+        conns.par_iter().with_min_len(PAR_MIN_LEN).map(dpabs).reduce(|| 0.0, f64::max)
+    } else {
+        conns.iter().map(dpabs).fold(0.0, f64::max)
+    };
+    let f = |c: &super::model::Connection| {
+        let dp = p[c.a] - p[c.b];
+        if dp.abs() <= 1e-9 * scale {
+            mean(c.a, c.b)
+        } else if dp > 0.0 {
+            mobility[c.a]
+        } else {
+            mobility[c.b]
+        }
+    };
+    if par {
+        conns.par_iter().with_min_len(PAR_MIN_LEN).map(f).collect()
+    } else {
+        conns.iter().map(f).collect()
+    }
 }
 
 /// Peaceman well index (m³) of a well segment with projected lengths
@@ -322,10 +327,24 @@ pub fn solve_pressure_with(
             "pressure solve: boundary inflow mobility must be finite and >= 0".into(),
         ));
     }
+    with_threads(None, || solve_pressure_impl(model, mobility, inj_mobility, wells, fixed, opts))
+}
+
+fn solve_pressure_impl(
+    model: &FlowModel,
+    mobility: &[f64],
+    inj_mobility: f64,
+    wells: &[FlowWell],
+    fixed: &[FixedPressure],
+    opts: &PressureOptions,
+) -> SxResult<PressureSolution> {
     let mut ctrl: Vec<WellControl> = wells.iter().map(|w| w.control).collect();
     let max_switch = 2 * wells.len() + 2;
+    // One factorization cache for every upwind and control-switch solve.
+    let cache = RefCell::new(SpdCache::default());
+    let entries = RefCell::new(SpdEntries::default());
     for round in 0.. {
-        let mut sol = solve_controls(model, mobility, inj_mobility, wells, &ctrl, fixed, opts)?;
+        let mut sol = solve_controls(model, mobility, inj_mobility, wells, &ctrl, fixed, opts, &cache, &entries)?;
         let changed = switch_controls(wells, &mut ctrl, &sol.wells.iter().map(|r| (r.bhp, r.rate)).collect::<Vec<_>>());
         if !changed || round == max_switch {
             if changed {
@@ -388,6 +407,8 @@ fn solve_controls(
     ctrl: &[WellControl],
     fixed: &[FixedPressure],
     opts: &PressureOptions,
+    cache: &RefCell<SpdCache>,
+    entries: &RefCell<SpdEntries>,
 ) -> SxResult<PressureSolution> {
     let max_iter = opts.max_upwind_iter;
     let nconn = model.connections.len();
@@ -488,12 +509,10 @@ fn solve_controls(
     };
     let ncomp_off = nconn + fixed.len();
     let assemble_solve = |face_mob: &[f64]| -> SxResult<Vec<f64>> {
-        let mut lower: BTreeMap<(usize, usize), f64> = BTreeMap::new();
+        let mut lower = entries.borrow_mut();
+        lower.clear();
         let mut rhs = vec![0.0; n_unk];
-        let add = |r: usize, c: usize, v: f64, m: &mut BTreeMap<(usize, usize), f64>| {
-            let key = if r >= c { (r, c) } else { (c, r) };
-            *m.entry(key).or_insert(0.0) += v;
-        };
+        let add = |r: usize, c: usize, v: f64, m: &mut SpdEntries| m.add(r, c, v);
         for c in 0..n {
             if !model.active[c] {
                 add(c, c, 1.0, &mut lower);
@@ -541,10 +560,11 @@ fn solve_controls(
                 };
             }
         }
-        if lower.values().any(|v| !v.is_finite()) {
+        if !lower.all_finite() {
             return Err(numerical("matrix has non-finite entries (check mobility)"));
         }
-        solve_spd(n_unk, &lower, rhs)
+        cache.borrow_mut().solve(n_unk, &lower, &mut rhs)?;
+        Ok(rhs)
     };
     let mean_mob = all_mob(None);
     let x_mean = assemble_solve(&mean_mob)?;
@@ -577,12 +597,12 @@ fn solve_controls(
             *v = f64::NAN;
         }
     }
-    let flux = model
-        .connections
-        .iter()
-        .zip(&face_mob)
-        .map(|(c, fm)| c.trans * fm * (p[c.a] - p[c.b]))
-        .collect();
+    let fl = |(c, fm): (&super::model::Connection, &f64)| c.trans * fm * (p[c.a] - p[c.b]);
+    let flux = if par_loops(nconn) {
+        model.connections.par_iter().zip(&face_mob[..nconn]).with_min_len(PAR_MIN_LEN).map(fl).collect()
+    } else {
+        model.connections.iter().zip(&face_mob).map(fl).collect()
+    };
     let boundary_flux = fixed
         .iter()
         .zip(&face_mob[nconn..])
@@ -658,51 +678,20 @@ pub(super) fn well_indices(model: &FlowModel, w: &FlowWell) -> SxResult<Vec<f64>
         .collect())
 }
 
-/// Solve a symmetric positive definite system given by its lower triangle.
+/// Solve a symmetric positive definite system given by its lower triangle
+/// (one-off; repeated solves should keep a [`SpdCache`]).
+#[allow(dead_code)]
 pub(super) fn solve_spd(
     n_unk: usize,
-    lower: &BTreeMap<(usize, usize), f64>,
-    rhs: Vec<f64>,
+    lower: &std::collections::BTreeMap<(usize, usize), f64>,
+    mut rhs: Vec<f64>,
 ) -> SxResult<Vec<f64>> {
-    if lower.values().any(|v| !v.is_finite()) || rhs.iter().any(|v| !v.is_finite()) {
-        return Err(numerical(
-            "matrix or right-hand side has non-finite entries (check mobility)",
-        ));
+    let mut e = SpdEntries::default();
+    for (&(r, c), &v) in lower {
+        e.add(r, c, v);
     }
-    let triplets: Vec<Triplet<usize, usize, f64>> = lower
-        .iter()
-        .map(|(&(r, c), &v)| Triplet::new(r, c, v))
-        .collect();
-    let a = SparseColMat::<usize, f64>::try_new_from_triplets(n_unk, n_unk, &triplets)
-        .map_err(|e| numerical(&format!("cannot build matrix: {e:?}")))?;
-    let symbolic = factorize_symbolic_cholesky(
-        a.symbolic(),
-        Side::Lower,
-        SymmetricOrdering::Amd,
-        CholeskySymbolicParams::default(),
-    )
-    .map_err(|e| numerical(&format!("symbolic Cholesky failed: {e:?}")))?;
-    let mut l_values = vec![0.0f64; symbolic.len_val()];
-    let mut mem = MemBuffer::try_new(StackReq::any_of(&[
-        symbolic.factorize_numeric_llt_scratch::<f64>(Par::Seq, Default::default()),
-        symbolic.solve_in_place_scratch::<f64>(1, Par::Seq),
-    ]))
-    .map_err(|e| numerical(&format!("cannot allocate workspace: {e:?}")))?;
-    let stack = MemStack::new(&mut mem);
-    let llt = symbolic
-        .factorize_numeric_llt::<f64>(&mut l_values, a.as_ref(), Side::Lower, LltRegularization::default(), Par::Seq, stack, Default::default())
-        .map_err(|e| numerical(&format!("Cholesky failed (is every region connected to a BHP well or fixed pressure?): {e:?}")))?;
-    let mut x = rhs;
-    llt.solve_in_place_with_conj(
-        Conj::No,
-        MatMut::from_column_major_slice_mut(&mut x, n_unk, 1),
-        Par::Seq,
-        stack,
-    );
-    if x.iter().any(|v| !v.is_finite()) {
-        return Err(numerical("solution is not finite"));
-    }
-    Ok(x)
+    SpdCache::default().solve(n_unk, &e, &mut rhs)?;
+    Ok(rhs)
 }
 
 #[cfg(test)]

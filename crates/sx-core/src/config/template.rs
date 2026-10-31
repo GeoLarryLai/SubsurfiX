@@ -129,7 +129,7 @@ resd_decade_log10 = 0.7  # RESD median offset from the reference that blanks the
 pileup_min_len = 20  # shortest saturation pileup that is masked (samples)
 pileup_min_share = 0.01  # minimum share of the channel at the pileup value (fraction)
 pileup_rel_tol = 1e-8  # equality tolerance of a pileup (× max(max|v|, 1))
-badhole_logs = ["RHOB", "PEF"]  # logs masked where the borehole is bad (caliper / density correction); empty switches the bad-hole rule off
+badhole_logs = ["RHOB", "PEF", "NPHI"]  # logs masked where the borehole is bad (caliper / density correction); empty switches the bad-hole rule off
 cal_open_min_in = 5.0  # caliper below this reads as closed or cased hole (in)
 cal_undergauge_in = 1.0  # caliper this far below the well's nominal hole size is undergauge (in)
 cal_washout_in = 2.0  # caliper this far above the well's nominal hole size is washout (in)
@@ -289,6 +289,35 @@ degenerate_span = 1e-10  # anchor span treated as zero (native units)
 depth_max_cover = 0.9  # cover at or above → whole-interval (fraction)
 depth_bins = 20  # layer bins per interval (bins per interval)
 depth_candidates = 61  # voters walked per target (wells)
+nphi_offset = true  # shift wells whose NPHI departs from the field NPHI - DPHI offset in clean tight rock
+nphi_offset_gr_max = 30.0  # GR at or below this marks clean rock for the NPHI offset (API)
+nphi_offset_rhob_min = 2.6  # RHOB at or above this marks tight rock for the NPHI offset (g/cm³)
+nphi_offset_rho_matrix = 2.71  # matrix density of the density porosity (g/cm³)
+nphi_offset_rho_fluid = 1.0  # fluid density of the density porosity (g/cm³)
+nphi_offset_min_count = 30  # clean tight samples a well needs for an offset (samples)
+nphi_offset_limit = 0.04  # departure from the field offset that triggers the shift (v/v)
+nphi_shift = 0.0  # manual field-wide shift subtracted from NPHI (v/v); nonzero overrides an evaluated offset
+
+# Field-wide NPHI offset (`subsurfix nphi-offset`); applied in normalize once evaluated.
+[nphi_offset]
+apply = true  # subtract the evaluated offset from NPHI in normalize when an evaluation is stored
+gr_max = 30.0  # clean rock: GR at or below (API)
+phi_max = 0.05  # tight rock: neutron-density porosity (NPHI + DPHI_ls) / 2 at or below (v/v)
+pef_min = 4.0  # limestone PEF window, lower bound, where PEF is measured (b/e)
+pef_max = 6.0  # limestone PEF window, upper bound, where PEF is measured (b/e)
+require_pef = false  # reject samples without PEF
+rho_matrix = 2.71  # matrix density of the density porosity (g/cm³)
+rho_fluid = 1.0  # fluid density of the density porosity (g/cm³)
+min_well_samples = 30  # qualifying samples a well needs to count (samples)
+min_wells = 5  # qualifying wells needed for a field estimate (wells)
+n_boot = 1000  # bootstrap resamples of the wells
+ci_level = 0.9  # two-sided confidence level of the interval
+outlier_limit = 0.04  # well offsets further than this from the field offset are outliers (v/v)
+fit_phi_max = 0.25  # trend fit: clean limestone up to this neutron-density porosity (v/v)
+fit_bin = 0.01  # trend fit: porosity bin width (v/v)
+slope_tol = 0.1  # largest |slope| of (NPHI - DPHI_ls) vs neutron-density porosity accepted as a constant offset
+n_boot_slope = 200  # bootstrap resamples for the slope interval
+max_plot_samples = 20000  # qualifying samples written for plots (samples)
 
 # Neighbors.
 [neighbors]
@@ -455,4 +484,7 @@ quantiles = [0.1, 0.5, 0.9]  # predicted quantile levels, each in (0, 1)
 qrf_trees = 200  # QRF trees
 qrf_min_leaf = 10  # QRF minimum rows per leaf
 lgbm_iterations = 300  # LightGBM boosting rounds
+lgbm_conformal = true  # widen LightGBM bands by cross-conformal CQR
+qrf_conformal = false  # widen QRF bands by cross-conformal CQR
+conformal_folds = 5  # folds for the conformal scores (well folds when well ids exist)
 "#;

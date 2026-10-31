@@ -4,7 +4,6 @@
 
 use sx_core::flow::analytic::{buckley_leverett, thiem_drop};
 use sx_core::flow::benchmarks::compare_spe10;
-use sx_core::flow::implicit::run_fully_implicit;
 use sx_core::flow::{
     peaceman_wi, run_impes, run_tracer, solve_pressure, Corey, FixedPressure, FlowModel, FlowWell,
     ImpesOptions, WellControl, WellKind,
@@ -236,10 +235,6 @@ fn buckley_leverett_profile() {
 
 #[test]
 fn unimplemented_stubs_say_so() {
-    assert!(run_fully_implicit()
-        .unwrap_err()
-        .to_string()
-        .contains("not implemented (stub)"));
     assert!(compare_spe10()
         .unwrap_err()
         .to_string()

@@ -567,6 +567,7 @@ fn not_up_to_date(stage: Stage, from: Stage) -> SxError {
 /// project with another thread count runs on its own pool), `SxError::Format` (bad manifest), `SxError::Io`, and any stage error
 /// (recorded as a `failed` history entry; the stage record is removed).
 pub fn run(config: &ProjectConfig, options: &RunOptions) -> SxResult<RunSummary> {
+    let config = &crate::nphi_offset::effective_config(&options.project_dir, config)?;
     crate::runtime::with_threads(options.threads.unwrap_or(config.runtime.threads), || {
         run_on_pool(config, options)
     })
@@ -669,6 +670,7 @@ fn run_on_pool(config: &ProjectConfig, options: &RunOptions) -> SxResult<RunSumm
 /// `SxError::Format` (bad manifest), `SxError::Io`, `SxError::Config`.
 pub fn status(config: &ProjectConfig, options: &RunOptions) -> SxResult<Vec<StageStatus>> {
     let project = options.project_dir.as_path();
+    let config = &crate::nphi_offset::effective_config(project, config)?;
     let manifest = Manifest::load(project)?;
     let nonce = new_nonce();
     let mut cache = HashCache::default();

@@ -43,6 +43,22 @@ pub struct NormalizeConfig {
     pub depth_bins: usize,
     /// voters walked per target (wells)
     pub depth_candidates: usize,
+    /// shift wells whose NPHI departs from the field NPHI - DPHI offset in clean tight rock
+    pub nphi_offset: bool,
+    /// GR at or below this marks clean rock for the NPHI offset (API)
+    pub nphi_offset_gr_max: f64,
+    /// RHOB at or above this marks tight rock for the NPHI offset (g/cm³)
+    pub nphi_offset_rhob_min: f64,
+    /// matrix density of the density porosity (g/cm³)
+    pub nphi_offset_rho_matrix: f64,
+    /// fluid density of the density porosity (g/cm³)
+    pub nphi_offset_rho_fluid: f64,
+    /// clean tight samples a well needs for an offset (samples)
+    pub nphi_offset_min_count: usize,
+    /// departure from the field offset that triggers the shift (v/v)
+    pub nphi_offset_limit: f64,
+    /// manual field-wide shift subtracted from NPHI (v/v); nonzero overrides an evaluated offset
+    pub nphi_shift: f64,
 }
 
 impl Default for NormalizeConfig {
@@ -64,6 +80,14 @@ impl Default for NormalizeConfig {
             depth_max_cover: 0.9,
             depth_bins: 20,
             depth_candidates: 61,
+            nphi_offset: true,
+            nphi_offset_gr_max: 30.0,
+            nphi_offset_rhob_min: 2.60,
+            nphi_offset_rho_matrix: 2.71,
+            nphi_offset_rho_fluid: 1.0,
+            nphi_offset_min_count: 30,
+            nphi_offset_limit: 0.04,
+            nphi_shift: 0.0,
         }
     }
 }

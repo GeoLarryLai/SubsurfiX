@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 use pyo3::prelude::*;
 use pyo3::IntoPyObjectExt;
 use sx_core::config::{
-    self, AreaSource, EdgesConfig, HeaderSource, PtsSource, ProjectConfig, ProjectSection, RuntimeConfig,
-    SurveySource, TopsSource,
+    self, AreaSource, EdgesConfig, HeaderSource, ProjectConfig, ProjectSection, PtsSource,
+    RuntimeConfig, SurveySource, TopsSource,
 };
 use sx_core::pipeline::{self, RunOptions, RunSummary, Stage, StageOutcome, StageStatus};
 use sx_core::{SxError, SxResult};
@@ -150,6 +150,39 @@ pub(crate) fn pipeline_status(py: Python<'_>, config_path: PathBuf) -> PyResult<
     status.iter().map(|s| status_row(py, s)).collect()
 }
 
+/// Evaluate the field-wide NPHI offset of the project at `config_path` (needs
+/// `qc`; GIL released) and store it under `stages/nphi_offset/`. Returns the
+/// result as JSON text. Errors: those of `config::load_project` and
+/// `nphi_offset::evaluate_project`.
+#[pyfunction]
+pub(crate) fn evaluate_nphi_offset(py: Python<'_>, config_path: PathBuf) -> PyResult<String> {
+    let dir = project_dir(&config_path);
+    let result: SxResult<String> = py.detach(move || {
+        let cfg = config::load_project(&config_path)?;
+        let r = sx_core::nphi_offset::evaluate_project(&dir, &cfg)?;
+        r.to_json()
+    });
+    result.map_err(to_py_err)
+}
+
+/// NPHI shift normalize uses for the project at `config_path`, and its source
+/// (`manual`, `evaluated` or `none`).
+#[pyfunction]
+pub(crate) fn nphi_shift(config_path: PathBuf) -> PyResult<(f64, &'static str)> {
+    let dir = project_dir(&config_path);
+    let r: SxResult<(f64, &'static str)> = (|| {
+        let cfg = config::load_project(&config_path)?;
+        let stored = sx_core::nphi_offset::load(&dir)?;
+        let (s, src) = sx_core::nphi_offset::resolve_shift(
+            cfg.normalize.nphi_shift,
+            cfg.nphi_offset.apply,
+            stored.as_ref(),
+        );
+        Ok((s, src.name()))
+    })();
+    r.map_err(to_py_err)
+}
+
 /// Print engine log events at `level` (`error`, `warn`, `info`, `debug`,
 /// `trace`, any case) and above to stderr. Returns `True` if installed now,
 /// `False` if a subscriber already existed. Errors: `InvalidInputError` for
@@ -229,6 +262,7 @@ fn project_json(cfg: &ProjectConfig) -> SxResult<String> {
         align: _,
         dtw: _,
         normalize: _,
+        nphi_offset,
         neighbors: _,
         fill: _,
         correlate: _,
@@ -256,6 +290,10 @@ fn project_json(cfg: &ProjectConfig) -> SxResult<String> {
         };
         out = out.raw(section, text);
     }
+    out = out.raw(
+        "nphi_offset",
+        sx_core::nphi_offset::config_json(nphi_offset)?,
+    );
     let q: Vec<String> = propagation
         .quantiles
         .iter()
@@ -269,6 +307,9 @@ fn project_json(cfg: &ProjectConfig) -> SxResult<String> {
             .raw("qrf_trees", propagation.qrf_trees.to_string())
             .raw("qrf_min_leaf", propagation.qrf_min_leaf.to_string())
             .raw("lgbm_iterations", propagation.lgbm_iterations.to_string())
+            .raw("lgbm_conformal", propagation.lgbm_conformal.to_string())
+            .raw("qrf_conformal", propagation.qrf_conformal.to_string())
+            .raw("conformal_folds", propagation.conformal_folds.to_string())
             .finish(),
     );
     Ok(out.finish())

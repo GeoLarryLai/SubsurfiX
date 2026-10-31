@@ -3,7 +3,8 @@
 //! Stochastic simulation on open Kansas Geological Survey (KGS) data (T34S R11W):
 //! 5-fold leave-wells-out comparison of ordinary kriging (OK), sequential
 //! Gaussian simulation (SGS), and `ml_propagation` (quantile LightGBM and
-//! the in-house quantile regression forest, QRF) for density porosity, plus
+//! the in-house quantile regression forest, QRF) and EMBER (forest with
+//! embedded kriging) for density porosity, plus
 //! sequential indicator simulation (SIS) of a two-class GR facies.
 //! Coordinates: x, y (m) and depth relative to the Mississippian top.
 //! "The source of this material is the Kansas Geological Survey website at
@@ -18,7 +19,8 @@ use sx_core::grid::{
 };
 use sx_core::ingest::run_ingest;
 use sx_core::sim::{
-    ml_propagation, sgs, sis, NormalScore, PropagationModel, PropagationParams, QrfParams,
+    conformal_offsets, ember, ml_propagation, ml_propagation_grouped, sgs, sis, EmbedHoldout,
+    EmberInput, EmberParams, NormalScore, PropagationModel, PropagationParams, QrfParams,
     SgsParams, SisParams,
 };
 use sx_core::types::LogKind;
@@ -45,11 +47,15 @@ fn r2(pred: &[f64], truth: &[f64]) -> f64 {
     1.0 - ss_res / ss_tot
 }
 
-fn quantile(v: &mut [f64], q: f64) -> f64 {
+/// Quantile of a realization set at position u (n + 1) (Hyndman-Fan type 6),
+/// so a calibrated set covers its nominal band on average.
+fn realization_quantile(v: &mut [f64], u: f64) -> f64 {
     v.sort_by(f64::total_cmp);
-    let pos = q * (v.len() - 1) as f64;
-    let (lo, hi) = (pos.floor() as usize, pos.ceil() as usize);
-    v[lo] + (v[hi] - v[lo]) * (pos - lo as f64)
+    let n = v.len();
+    let x = (u * (n + 1) as f64 - 1.0).clamp(0.0, (n - 1) as f64);
+    let lo = x.floor() as usize;
+    let hi = (lo + 1).min(n - 1);
+    v[lo] + (v[hi] - v[lo]) * (x - lo as f64)
 }
 
 #[test]
@@ -123,12 +129,15 @@ fn kgs_porosity_and_facies_simulation() {
     let names = [
         "OK",
         "SGS (20 real.)",
-        "ml_propagation LightGBM",
+        "ml_propagation LightGBM CQR",
         "ml_propagation QRF",
+        "EMBER QRF (envelope)",
+        "EMBER (20 real.)",
+        "ml_propagation LightGBM raw",
     ];
-    let mut pred: Vec<Vec<f64>> = vec![vec![]; 4];
-    let mut inside = [0usize; 4];
-    let mut width = [0.0f64; 4];
+    let mut pred: Vec<Vec<f64>> = vec![vec![]; 7];
+    let mut inside = [0usize; 7];
+    let mut width = [0.0f64; 7];
     let mut truth: Vec<f64> = vec![];
     let (mut fac_ok, mut fac_base, mut fac_n, mut fac_prop1) = (0usize, 0usize, 0usize, 0.0f64);
     for fold in 0..5 {
@@ -188,13 +197,20 @@ fn kgs_porosity_and_facies_simulation() {
         let fx = |s: &&Sample| vec![s.x, s.y, s.zrel_ft];
         let trx: Vec<Vec<f64>> = tr.iter().map(fx).collect();
         let tex: Vec<Vec<f64>> = te.iter().map(fx).collect();
-        let lg = ml_propagation(
+        let tg: Vec<i32> = tr.iter().map(|s| s.well as i32).collect();
+        let lp = PropagationParams {
+            model: PropagationModel::LightGbm,
+            seed: fold as u64,
+            ..PropagationParams::default()
+        };
+        let lg = ml_propagation_grouped(&trx, &tv, Some(&tg), &tex, &lp).unwrap();
+        let lr = ml_propagation(
             &trx,
             &tv,
             &tex,
             &PropagationParams {
-                seed: fold as u64,
-                ..PropagationParams::default()
+                conformal_lgbm: false,
+                ..lp.clone()
             },
         )
         .unwrap();
@@ -209,6 +225,31 @@ fn kgs_porosity_and_facies_simulation() {
             ..PropagationParams::default()
         };
         let qf = ml_propagation(&trx, &tv, &tex, &qp).unwrap();
+        if fold == 0 {
+            let el = conformal_offsets(&trx, &tv, Some(&tg), &lp).unwrap();
+            let eq = conformal_offsets(&trx, &tv, Some(&tg), &qp).unwrap();
+            eprintln!("CQR score quantile, fold 0: LightGBM {el:?}, QRF {eq:?}");
+        }
+        // EMBER: scaled coordinates plus embedded kriging, group hold-out.
+        let none_t = vec![vec![]; tp.len()];
+        let none_p = vec![vec![]; xp.len()];
+        let em = ember(
+            &EmberInput {
+                train_xyz: &tp,
+                train_y: &tv,
+                train_groups: &tg,
+                train_secondary: &none_t,
+                pred_xyz: &xp,
+                pred_secondary: &none_p,
+            },
+            &EmberParams {
+                propagation: qp.clone(),
+                embed_holdout: EmbedHoldout::Group,
+                n_realizations: 20,
+                ..EmberParams::default()
+            },
+        )
+        .unwrap();
 
         for (i, s) in te.iter().enumerate() {
             truth.push(s.phi);
@@ -222,11 +263,21 @@ fn kgs_porosity_and_facies_simulation() {
                 ),
                 (
                     r.iter().sum::<f64>() / r.len() as f64,
-                    quantile(&mut r, 0.1),
-                    quantile(&mut r, 0.9),
+                    realization_quantile(&mut r, 0.1),
+                    realization_quantile(&mut r, 0.9),
                 ),
                 (lg[i][1], lg[i][0], lg[i][2]),
                 (qf[i][1], qf[i][0], qf[i][2]),
+                (em.mean[i], em.quantiles[i][0], em.quantiles[i][2]),
+                {
+                    let mut e: Vec<f64> = em.realizations.iter().map(|x| x[i]).collect();
+                    (
+                        e.iter().sum::<f64>() / e.len() as f64,
+                        realization_quantile(&mut e, 0.1),
+                        realization_quantile(&mut e, 0.9),
+                    )
+                },
+                (lr[i][1], lr[i][0], lr[i][2]),
             ];
             for (m, (p, lo, hi)) in rows.into_iter().enumerate() {
                 pred[m].push(p);
@@ -277,7 +328,7 @@ fn kgs_porosity_and_facies_simulation() {
         / n)
         .sqrt();
     eprintln!("held-out samples {n}, porosity sd {sd:.4}");
-    for m in 0..4 {
+    for m in 0..names.len() {
         let rmse = (pred[m]
             .iter()
             .zip(&truth)
@@ -285,8 +336,14 @@ fn kgs_porosity_and_facies_simulation() {
             .sum::<f64>()
             / n)
             .sqrt();
+        let mae = pred[m]
+            .iter()
+            .zip(&truth)
+            .map(|(p, t)| (p - t).abs())
+            .sum::<f64>()
+            / n;
         eprintln!(
-            "SIM {:26} r2 {:5.2}  RMSE {:.4}  P10-P90 coverage {:.2}  mean width {:.4}",
+            "SIM {:28} MAE {mae:.4}  r2 {:5.2}  RMSE {:.4}  P10-P90 coverage {:.2}  mean width {:.4}",
             names[m],
             r2(&pred[m], &truth),
             rmse,

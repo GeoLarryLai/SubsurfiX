@@ -223,7 +223,7 @@ def _read_xlsx(
         import openpyxl
     except ImportError as exc:
         raise MissingDependencyError(
-            "openpyxl is needed to read .xlsx tables; install subsurfix[gis]"
+            "openpyxl is needed to read .xlsx tables; it is a regular subsurfix dependency, so run `pip install openpyxl` or reinstall subsurfix"
         ) from exc
     try:
         workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)

@@ -18,6 +18,12 @@ pub struct PropagationConfig {
     pub qrf_min_leaf: usize,
     /// LightGBM boosting rounds
     pub lgbm_iterations: usize,
+    /// widen LightGBM bands by cross-conformal CQR
+    pub lgbm_conformal: bool,
+    /// widen QRF bands by cross-conformal CQR
+    pub qrf_conformal: bool,
+    /// folds for the conformal scores (well folds when well ids exist)
+    pub conformal_folds: usize,
 }
 
 impl Default for PropagationConfig {
@@ -28,6 +34,9 @@ impl Default for PropagationConfig {
             qrf_trees: 200,
             qrf_min_leaf: 10,
             lgbm_iterations: 300,
+            lgbm_conformal: true,
+            qrf_conformal: false,
+            conformal_folds: 5,
         }
     }
 }

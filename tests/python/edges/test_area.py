@@ -29,7 +29,7 @@ def test_missing_shapefile(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> N
     monkeypatch.setitem(sys.modules, "shapefile", None)
     path = tmp_path / "area.shp"
     path.write_bytes(b"")
-    with pytest.raises(MissingDependencyError):
+    with pytest.raises(MissingDependencyError, match=r"pip install pyshp"):
         load_area(AreaSource(path=str(path)), "EPSG:32614")
 
 

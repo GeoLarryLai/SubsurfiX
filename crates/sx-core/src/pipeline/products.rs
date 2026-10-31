@@ -33,6 +33,7 @@ pub(crate) const LOGS_NORM: &str = "stages/normalize/logs_norm.parquet";
 pub(crate) const QC_FLAGS_POST: &str = "stages/normalize/qc_flags_post.parquet";
 pub(crate) const NORM_ANCHORS: &str = "stages/normalize/norm_anchors.csv";
 pub(crate) const NORM_REPORT: &str = "stages/normalize/norm_report.csv";
+pub(crate) const NPHI_OFFSET_REPORT: &str = "stages/normalize/nphi_offset_report.csv";
 
 pub(crate) const NEIGHBOR_CURVES: &str = "stages/neighbors/neighbor_curves.parquet";
 
@@ -161,7 +162,13 @@ pub(crate) fn fixed_outputs(stage: Stage) -> Vec<&'static str> {
             QC_LAS_MATCH,
         ],
         Stage::RoughAlign => vec![INTERVALS, TOPS_ESTIMATED, PAIRS_ROUGH, LAYER_COORD],
-        Stage::Normalize => vec![LOGS_NORM, QC_FLAGS_POST, NORM_ANCHORS, NORM_REPORT],
+        Stage::Normalize => vec![
+            LOGS_NORM,
+            QC_FLAGS_POST,
+            NORM_ANCHORS,
+            NORM_REPORT,
+            NPHI_OFFSET_REPORT,
+        ],
         Stage::Neighbors => vec![NEIGHBOR_CURVES],
         Stage::Fill => vec![LOGS_FILLED, FILL_REPORT, FILL_SUMMARY, MODELS_JSON],
         Stage::Correlate => vec![LAYER_TIME, TOPS, TOPS_CSV, SUSPECTS, SOLVE_REPORT],

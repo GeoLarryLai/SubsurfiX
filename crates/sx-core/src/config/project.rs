@@ -16,6 +16,7 @@ use super::fill::FillConfig;
 use super::ingest::IngestConfig;
 use super::neighbors::NeighborsConfig;
 use super::normalize::NormalizeConfig;
+use super::nphi_offset::NphiOffsetConfig;
 use super::propagation::PropagationConfig;
 use super::qc::QcConfig;
 use super::refresh::RefreshConfig;
@@ -55,6 +56,9 @@ pub struct ProjectConfig {
     /// normalization
     #[serde(default)]
     pub normalize: NormalizeConfig,
+    /// field-wide NPHI offset evaluation
+    #[serde(default)]
+    pub nphi_offset: NphiOffsetConfig,
     /// neighbor curves
     #[serde(default)]
     pub neighbors: NeighborsConfig,
@@ -175,6 +179,7 @@ impl ProjectConfig {
             align: AlignParams::default(),
             dtw: DtwConfig::default(),
             normalize: NormalizeConfig::default(),
+            nphi_offset: NphiOffsetConfig::default(),
             neighbors: NeighborsConfig::default(),
             fill: FillConfig::default(),
             correlate: CorrelateConfig::default(),

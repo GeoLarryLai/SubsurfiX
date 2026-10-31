@@ -286,6 +286,23 @@ pub struct NormalizeOutput {
     pub anchors: Vec<AnchorRow>,
     /// `norm_report.csv` rows.
     pub report: Vec<NormChannelRow>,
+    /// `nphi_offset_report.csv` rows (empty with `normalize.nphi_offset = false`).
+    pub nphi_offset: Vec<NphiOffsetRow>,
+}
+
+/// One row of `nphi_offset_report.csv` (one well with NPHI).
+#[derive(Debug, Clone, PartialEq)]
+pub struct NphiOffsetRow {
+    pub well_id: WellId,
+    pub well_name: String,
+    /// Clean tight samples used (GR, RHOB and NPHI finite).
+    pub n_ref: usize,
+    /// Median NPHI - DPHI over those samples (v/v; NaN below the minimum count).
+    pub offset_frac: f64,
+    /// Median of the well offsets (v/v).
+    pub field_offset_frac: f64,
+    /// Shift subtracted from NPHI (v/v; 0 when not shifted).
+    pub shift_frac: f64,
 }
 
 /// Working state of one channel.
@@ -414,6 +431,7 @@ pub fn run_normalize_stage(
             flags: Vec::new(),
             anchors: Vec::new(),
             report: Vec::new(),
+            nphi_offset: Vec::new(),
         });
     }
     let qc = &cfg.qc;
@@ -672,6 +690,24 @@ pub fn run_normalize_stage(
         }
     }
 
+    // N12b NPHI offset against the field in clean tight rock.
+    let nphi_offset = if nc.nphi_offset {
+        nphi_offset_check(&mut works, nc)
+    } else {
+        Vec::new()
+    };
+    if nc.nphi_shift != 0.0 {
+        if let Some(i) = LogKind::ALL.iter().position(|&l| l == LogKind::Nphi) {
+            for w in works.iter_mut() {
+                for v in &mut w.chans[i].values {
+                    if v.is_finite() {
+                        *v = (f64::from(*v) - nc.nphi_shift) as f32;
+                    }
+                }
+            }
+        }
+    }
+
     // N13 post-normalization checks: flat wells, bounds sweep, short runs.
     for li in 0..LogKind::ALL.len() {
         let values: Vec<(WellId, Vec<f64>)> = works
@@ -746,7 +782,120 @@ pub fn run_normalize_stage(
         flags: out_flags,
         anchors,
         report,
+        nphi_offset,
     })
+}
+
+/// N12b: per well, median NPHI - DPHI where GR <= `nphi_offset_gr_max` and
+/// RHOB >= `nphi_offset_rhob_min`; wells whose offset departs from the median
+/// well offset by more than `nphi_offset_limit` are shifted to it.
+fn nphi_offset_check(
+    works: &mut [Work],
+    nc: &crate::config::NormalizeConfig,
+) -> Vec<NphiOffsetRow> {
+    let pos = |l: LogKind| LogKind::ALL.iter().position(|&x| x == l);
+    let (Some(ig), Some(ir), Some(in_)) =
+        (pos(LogKind::Gr), pos(LogKind::Rhob), pos(LogKind::Nphi))
+    else {
+        return Vec::new();
+    };
+    let span = nc.nphi_offset_rho_matrix - nc.nphi_offset_rho_fluid;
+    let mut rows: Vec<NphiOffsetRow> = works
+        .iter()
+        .filter(|w| w.chans[in_].values.iter().any(|v| v.is_finite()))
+        .map(|w| {
+            let (g, r, n) = (
+                &w.chans[ig].values,
+                &w.chans[ir].values,
+                &w.chans[in_].values,
+            );
+            let mut d: Vec<f64> = (0..n.len())
+                .filter(|&i| {
+                    let (gi, ri, ni) = (f64::from(g[i]), f64::from(r[i]), f64::from(n[i]));
+                    gi.is_finite()
+                        && ri.is_finite()
+                        && ni.is_finite()
+                        && gi <= nc.nphi_offset_gr_max
+                        && ri >= nc.nphi_offset_rhob_min
+                })
+                .map(|i| f64::from(n[i]) - (nc.nphi_offset_rho_matrix - f64::from(r[i])) / span)
+                .collect();
+            d.sort_by(f64::total_cmp);
+            let off = if d.len() >= nc.nphi_offset_min_count {
+                let m = d.len() / 2;
+                if d.len() % 2 == 1 {
+                    d[m]
+                } else {
+                    0.5 * (d[m - 1] + d[m])
+                }
+            } else {
+                f64::NAN
+            };
+            NphiOffsetRow {
+                well_id: w.id,
+                well_name: w.name.to_string(),
+                n_ref: d.len(),
+                offset_frac: off,
+                field_offset_frac: f64::NAN,
+                shift_frac: 0.0,
+            }
+        })
+        .collect();
+    let mut offs: Vec<f64> = rows
+        .iter()
+        .map(|r| r.offset_frac)
+        .filter(|v| v.is_finite())
+        .collect();
+    if offs.is_empty() {
+        return rows;
+    }
+    offs.sort_by(f64::total_cmp);
+    let m = offs.len() / 2;
+    let field = if offs.len() % 2 == 1 {
+        offs[m]
+    } else {
+        0.5 * (offs[m - 1] + offs[m])
+    };
+    for row in &mut rows {
+        row.field_offset_frac = field;
+        let dev = row.offset_frac - field;
+        if dev.abs() > nc.nphi_offset_limit {
+            row.shift_frac = dev;
+            if let Some(w) = works.iter_mut().find(|w| w.id == row.well_id) {
+                for v in &mut w.chans[in_].values {
+                    if v.is_finite() {
+                        *v = (f64::from(*v) - dev) as f32;
+                    }
+                }
+            }
+            info!(
+                well = row.well_id.0,
+                shift = dev,
+                "normalize: NPHI offset shift"
+            );
+        }
+    }
+    rows
+}
+
+/// `nphi_offset_report` batch: one row per well with NPHI.
+///
+/// # Errors
+/// Arrow errors when the batch cannot be built.
+pub fn nphi_offset_batch(rows: &[NphiOffsetRow]) -> SxResult<RecordBatch> {
+    let r: Vec<&NphiOffsetRow> = rows.iter().collect();
+    finish(
+        vec![
+            ("well_id", col_i32(&r, |x| x.well_id.0)),
+            ("well_name", col_str(&r, |x| x.well_name.clone())),
+            ("n_ref", col_i64(&r, |x| x.n_ref)),
+            ("offset_frac", col_f64(&r, |x| x.offset_frac)),
+            ("field_offset_frac", col_f64(&r, |x| x.field_offset_frac)),
+            ("shift_frac", col_f64(&r, |x| x.shift_frac)),
+            ("shifted", col_bool(&r, |x| x.shift_frac != 0.0)),
+        ],
+        "subsurfix.nphi_offset_report/1",
+    )
 }
 
 /// N11: RESD median against the inverse-distance mean of the voters' medians.
@@ -1407,6 +1556,75 @@ mod tests {
             bits: LogKind::ALL.iter().map(|&l| (l, vec![0u8; n])).collect(),
         };
         (header, logs, flags)
+    }
+
+    /// A well whose clean tight NPHI - DPHI departs from the field is shifted
+    /// to the field offset; `nphi_shift` then moves every well.
+    #[test]
+    fn nphi_offset_shifts_outlier_well() {
+        let (mut wells, mut logs, mut flags) = (Vec::new(), Vec::new(), Vec::new());
+        for id in 0..4 {
+            let (h, mut l, f) = well(id);
+            let n = l.grid.len;
+            let rhob: Vec<f32> = (0..n)
+                .map(|j| (2.65 + 0.03 * (0.1 * j as f64 + f64::from(id)).sin()) as f32)
+                .collect();
+            let bias = if id == 3 { 0.15 } else { 0.03 };
+            let nphi: Vec<f32> = rhob
+                .iter()
+                .map(|&r| ((2.71 - f64::from(r)) / 1.71 + bias) as f32)
+                .collect();
+            let gr: Vec<f32> = (0..n)
+                .map(|j| (18.0 + 6.0 * (0.13 * j as f64 + f64::from(id)).sin()) as f32)
+                .collect();
+            l.curves.insert(LogKind::Gr, gr);
+            l.curves.insert(LogKind::Rhob, rhob);
+            l.curves.insert(LogKind::Nphi, nphi);
+            l.provenance.insert(LogKind::Nphi, vec![0u8; n]);
+            wells.push(h);
+            logs.push(l);
+            flags.push(f);
+        }
+        let layer = BTreeMap::new();
+        let input = NormalizeInput {
+            wells: &wells,
+            logs_qc: &logs,
+            flags: &flags,
+            prior: &[],
+            geometry: &[],
+            intervals: &[],
+            layer: &layer,
+            pairs: &[],
+        };
+        let mut c = cfg();
+        c.normalize.logs.retain(|&l| l != LogKind::Nphi);
+        let out = run_normalize_stage(&input, &c).unwrap();
+        assert_eq!(out.nphi_offset.len(), 4);
+        for r in &out.nphi_offset {
+            assert!((r.field_offset_frac - 0.03).abs() < 1e-3);
+            let want = if r.well_id.0 == 3 { 0.12 } else { 0.0 };
+            assert!((r.shift_frac - want).abs() < 1e-3, "{r:?}");
+        }
+        let med = |o: &NormalizeOutput, id: usize| {
+            let (src, got) = (&logs[id], &o.logs[id]);
+            let d: Vec<f64> = src.curves[&LogKind::Nphi]
+                .iter()
+                .zip(&got.curves[&LogKind::Nphi])
+                .filter(|(a, b)| a.is_finite() && b.is_finite())
+                .map(|(a, b)| f64::from(*a) - f64::from(*b))
+                .collect();
+            d.iter().sum::<f64>() / d.len() as f64
+        };
+        assert!((med(&out, 3) - 0.12).abs() < 1e-3);
+        assert!(med(&out, 0).abs() < 1e-6);
+        c.normalize.nphi_shift = 0.02;
+        let out = run_normalize_stage(&input, &c).unwrap();
+        assert!((med(&out, 0) - 0.02).abs() < 1e-5);
+        c.normalize.nphi_offset = false;
+        c.normalize.nphi_shift = 0.0;
+        let out = run_normalize_stage(&input, &c).unwrap();
+        assert!(out.nphi_offset.is_empty());
+        assert!(med(&out, 3).abs() < 1e-6);
     }
 
     /// RHOB and DTC come out bit-identical, RESD as its log10; no stage-4

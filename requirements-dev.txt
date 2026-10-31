@@ -1,0 +1,11 @@
+# Development, test and example-notebook tools (not needed to use SubsurfiX).
+# Install with: pip install -r requirements-dev.txt
+maturin>=1.14,<1.15
+pytest>=9.1.1
+ruff>=0.6
+nbformat>=5.10
+nbconvert>=7.16
+ipykernel>=6.29
+matplotlib>=3.8
+pandas>=2.2
+lasio>=0.31

@@ -64,7 +64,7 @@ def test_missing_openpyxl(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> No
     monkeypatch.setitem(sys.modules, "openpyxl", None)
     path = tmp_path / "t.xlsx"
     path.write_bytes(b"")
-    with pytest.raises(MissingDependencyError):
+    with pytest.raises(MissingDependencyError, match=r"pip install openpyxl"):
         read_rows(path, None, ",")
 
 

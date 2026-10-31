@@ -18,8 +18,8 @@ pub use reference::{
     RefSource, Scope, Voter, VoterExclusion,
 };
 pub use stage::{
-    logs_norm_batch, norm_anchors_batch, norm_report_batch, run_normalize_stage, AnchorRow,
-    NormChannelAction, NormChannelRow, NormalizeInput, NormalizeOutput, PriorChannel,
-    LOGS_NORM_TAG, NORM_ANCHORS_TAG, NORM_REPORT_TAG, QC_FLAGS_POST_TAG,
+    logs_norm_batch, norm_anchors_batch, norm_report_batch, nphi_offset_batch, run_normalize_stage,
+    AnchorRow, NormChannelAction, NormChannelRow, NormalizeInput, NormalizeOutput, NphiOffsetRow,
+    PriorChannel, LOGS_NORM_TAG, NORM_ANCHORS_TAG, NORM_REPORT_TAG, QC_FLAGS_POST_TAG,
 };
 pub use transform::{gain_offset, transform_channel, GainOffset};

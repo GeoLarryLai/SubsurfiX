@@ -7,22 +7,31 @@
 //!   (porosity, or permeability as log10), ordinary-kriging based.
 //! - [`sis`]: sequential indicator simulation (SIS) of facies codes.
 //! - [`qrf`]: quantile regression forest (Meinshausen 2006), written in house.
-//! - [`propagation`]: `ml_propagation`: quantile
-//!   models (LightGBM by default, quantile forest as comparison) from
-//!   location/stratigraphic features to P10/P50/P90 at target points.
+//! - [`propagation`]: `ml_propagation`: quantile models (quantile forest
+//!   by default, LightGBM as option) from location/stratigraphic features
+//!   to P10/P50/P90 at target points.
+//! - [`ember`]: EMBER: embedded kriging inputs, a quantile-forest envelope,
+//!   well conditioning, spatially correlated realizations and blocked
+//!   cross-validation.
 //!
 //! Limitations for the whole module: neighbour search is brute
 //! force; anisotropy only by scaling coordinates before the call; no
 //! multiple-grid search, no collocated secondary data, no trend in SGS.
 
+pub mod ember;
 pub mod nscore;
 pub mod propagation;
 pub mod qrf;
 pub mod sgs;
 pub mod sis;
 
+pub use ember::{
+    ember, ember_cv, CvScore, EmbedHoldout, EmberInput, EmberParams, EmberResult, Spread,
+};
 pub use nscore::{norm_cdf, norm_inv, NormalScore};
-pub use propagation::{ml_propagation, PropagationModel, PropagationParams};
+pub use propagation::{
+    conformal_offsets, ml_propagation, ml_propagation_grouped, PropagationModel, PropagationParams,
+};
 pub use qrf::{QrfParams, QuantileForest};
 pub use sgs::{sgs, SgsParams};
 pub use sis::{sis, SisParams};
@@ -145,7 +154,6 @@ impl Buckets {
         }
     }
 }
-
 
 /// Bucket side giving about 8 points per occupied cell over the bounding box
 /// of `pts` (axes with no extent are ignored).

@@ -14,7 +14,7 @@ def _pyproj(task: str):
         import pyproj
     except ImportError as exc:
         raise MissingDependencyError(
-            f"pyproj is needed to {task}; install subsurfix[gis]"
+            f"pyproj is needed to {task}; it is a regular subsurfix dependency, so run `pip install pyproj` or reinstall subsurfix"
         ) from exc
     return pyproj
 

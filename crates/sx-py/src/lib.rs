@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Larry Syu-Heng Lai
+mod co2;
 mod errors;
+mod facies;
+mod fim;
 mod flow;
 mod grid;
 mod plugin;
@@ -52,6 +55,8 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(plugin::registered_models, m)?)?;
     m.add_function(wrap_pyfunction!(plugin::_plugin_roundtrip, m)?)?;
     m.add_function(wrap_pyfunction!(project::version, m)?)?;
+    m.add_function(wrap_pyfunction!(project::evaluate_nphi_offset, m)?)?;
+    m.add_function(wrap_pyfunction!(project::nphi_shift, m)?)?;
     m.add_function(wrap_pyfunction!(project::stage_names, m)?)?;
     m.add_function(wrap_pyfunction!(project::stage_products, m)?)?;
     m.add_function(wrap_pyfunction!(project::config_json, m)?)?;
@@ -72,14 +77,29 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sim::sis, m)?)?;
     m.add_function(wrap_pyfunction!(sim::normal_score, m)?)?;
     m.add_function(wrap_pyfunction!(sim::ml_propagation, m)?)?;
+    m.add_function(wrap_pyfunction!(sim::ember, m)?)?;
+    m.add_function(wrap_pyfunction!(sim::ember_cv, m)?)?;
+    m.add_function(wrap_pyfunction!(facies::separability, m)?)?;
+    m.add_function(wrap_pyfunction!(facies::facies_interpret, m)?)?;
+    m.add_function(wrap_pyfunction!(facies::facies_default_cutoffs, m)?)?;
+    m.add_function(wrap_pyfunction!(facies::facies_rollup_classify, m)?)?;
     m.add_class::<grid::PyCornerPointGrid>()?;
     m.add_class::<flow::PyFlowModel>()?;
     m.add_class::<flow::PyFixedPressure>()?;
     m.add_function(wrap_pyfunction!(flow::peaceman_wi, m)?)?;
     m.add_function(wrap_pyfunction!(flow::buckley_leverett, m)?)?;
+    m.add_function(wrap_pyfunction!(fim::run_fim_water_oil, m)?)?;
+    m.add_function(wrap_pyfunction!(fim::run_fim_black_oil, m)?)?;
+    m.add_function(wrap_pyfunction!(fim::fim_water_mass_fraction, m)?)?;
+    m.add_function(wrap_pyfunction!(fim::run_fim_co2_brine, m)?)?;
+    m.add_function(wrap_pyfunction!(fim::run_fim_thermal_water, m)?)?;
     m.add_function(wrap_pyfunction!(flow::capillary_pressure, m)?)?;
     m.add_function(wrap_pyfunction!(flow::theis_drawdown, m)?)?;
     m.add_function(wrap_pyfunction!(flow::water_properties, m)?)?;
+    m.add_function(wrap_pyfunction!(co2::co2_solubility, m)?)?;
+    m.add_function(wrap_pyfunction!(co2::co2_brine_flash, m)?)?;
+    m.add_function(wrap_pyfunction!(flow::set_flow_threads, m)?)?;
+    m.add_function(wrap_pyfunction!(flow::flow_threads, m)?)?;
     #[cfg(feature = "testing")]
     m.add_function(wrap_pyfunction!(testing::_make_synthetic_project, m)?)?;
     Ok(())

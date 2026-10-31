@@ -48,7 +48,7 @@ class InfeasibleError(SubsurfixError):
 
 
 class MissingDependencyError(SubsurfixError, ImportError):
-    """Raised when an optional extra (for example `subsurfix[gis]`) is not installed."""
+    """Raised when a required dependency (for example pyproj or shapely) cannot be imported; reinstall subsurfix."""
 
 
 VARIANT_TO_CLASS: dict[str, type[SubsurfixError]] = {

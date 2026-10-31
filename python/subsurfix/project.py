@@ -119,6 +119,28 @@ class Project:
         scores, summary = _native.score_holdout(self.config_path, threads)
         return {"scores": _read_csv(scores), "summary": _read_csv(summary)}
 
+    def evaluate_nphi_offset(self, plot: bool = True) -> dict[str, object]:
+        """Estimate the field-wide NPHI offset against limestone density porosity.
+
+        Uses measured logs after QC (bad hole masked), before normalization and fill;
+        the project must have run through ``qc``. d = NPHI - DPHI_ls on clean, tight
+        limestone: P10/P50/P90 per well and field-wide, field offset (median of well
+        medians) with a bootstrap interval, and a robust fit of d against
+        neutron-density porosity. ``status`` is ``ok`` only for a constant offset
+        (interval excludes 0, small slope, enough wells); then the next ``run``
+        subtracts ``shift`` from NPHI in normalize unless ``[nphi_offset] apply = false``
+        or ``[normalize] nphi_shift`` is set. Writes ``stages/nphi_offset/`` (result.json,
+        wells.csv, samples.csv and, with ``plot``, crossplot.png).
+        """
+        r: dict[str, object] = json.loads(_native.evaluate_nphi_offset(self.config_path))
+        if plot:
+            _plot_nphi_offset(self.root / "stages/nphi_offset", r)
+        return r
+
+    def nphi_shift(self) -> tuple[float, str]:
+        """NPHI shift the next ``run`` applies and its source: ``manual``, ``evaluated`` or ``none``."""
+        return _native.nphi_shift(self.config_path)
+
     def fill_summary(self) -> pa.Table:
         """Per well and log: measured, filled and unfilled samples, ``predicted_share``
         and ``mostly_predicted`` (share above ``[fill] mostly_predicted_share``).
@@ -171,6 +193,39 @@ class Project:
         if not path.exists():
             return PTS_SCHEMA.empty_table()
         return pq.read_table(path)
+
+
+def _plot_nphi_offset(folder: Path, r: dict[str, object]) -> None:
+    import matplotlib.pyplot as plt
+
+    s = _read_csv(folder / "samples.csv").to_pandas()
+    fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+    ax[0].scatter(s.dphi_ls, s.nphi, c=s.well_id, cmap="tab20", s=2, alpha=0.5)
+    x = np.linspace(-0.05, 0.3, 50)
+    ax[0].plot(x, x, "k-", lw=1, label="1:1")
+    t = r.get("trend_phi")
+    if isinstance(t, dict):
+        a, b = float(t["intercept"]), float(t["slope"])
+        # d = a + b (N + D) / 2  ->  N = (a + D (1 + b / 2)) / (1 - b / 2)
+        ax[0].plot(x, (a + x * (1 + b / 2)) / (1 - b / 2), "r-", lw=1.5, label=f"fit: d = {a:.3f} + {b:.2f} PHI_ND")
+    f = r.get("field_offset")
+    if f is not None:
+        ax[0].plot(x, x + float(f), "r--", lw=1, label=f"1:1 + {float(f):.3f}")
+    ax[0].set(xlim=(-0.05, 0.3), ylim=(-0.05, 0.4), xlabel="DPHI limestone (v/v)", ylabel="NPHI (v/v)",
+              title=f"Clean limestone, colored by well ({r['status']})")
+    ax[0].legend(loc="upper left")
+    d = (s.nphi - s.dphi_ls)[(s.nphi + s.dphi_ls) / 2 <= 0.05]
+    ax[1].hist(d, bins=80, range=(-0.15, 0.3), color="0.5")
+    p = r.get("field_pct")
+    if isinstance(p, dict):
+        for k, st in [("p10", ":"), ("p50", "-"), ("p90", ":")]:
+            ax[1].axvline(float(p[k]), color="r", ls=st, label=f"{k.upper()} {float(p[k]):.3f}")
+    ax[1].axvline(0, color="k", lw=1)
+    ax[1].set(xlabel="NPHI - DPHI (v/v), tight samples", ylabel="samples", title="Offset distribution")
+    ax[1].legend()
+    fig.tight_layout()
+    fig.savefig(folder / "crossplot.png", dpi=110)
+    plt.close(fig)
 
 
 def _read_csv(path: str | os.PathLike[str]) -> pa.Table:

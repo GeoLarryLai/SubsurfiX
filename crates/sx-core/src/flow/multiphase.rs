@@ -32,10 +32,14 @@
 //! the completed cells for producers. Capillary pressure is not applied at
 //! wells or fixed-pressure cells.
 
-use std::collections::BTreeMap;
+use std::cell::RefCell;
+use std::sync::Mutex;
+
+use rayon::prelude::*;
 
 use super::model::FlowModel;
-use super::pressure::{completion_direction, solve_spd, switch_controls, well_indices, FixedPressure, FlowWell, WellControl, WellKind};
+use super::solver::{par_loops, with_threads, ReportOptions, Snapshot, SpdCache, SpdEntries, PAR_MIN_LEN};
+use super::pressure::{completion_direction, switch_controls, well_indices, FixedPressure, FlowWell, WellControl, WellKind};
 use super::transport::Corey;
 use crate::error::{SxError, SxResult};
 
@@ -275,6 +279,8 @@ struct Ctx<'a> {
     wis: Vec<Vec<f64>>,
     z_ref: Vec<f64>,
     bw_fixed: f64,
+    spd: Mutex<SpdCache>,
+    ent: Mutex<SpdEntries>,
 }
 
 impl Ctx<'_> {
@@ -337,8 +343,18 @@ impl Ctx<'_> {
         let n = m.n_cells();
         let g = self.ph.gravity;
         let (rw, ro) = (self.ph.rho_w, self.ph.rho_o);
-        let mob: Vec<(f64, f64)> = s.iter().map(|&v| self.mob(v)).collect();
-        let pc: Vec<f64> = s.iter().map(|&v| self.pc(v)).collect();
+        let pl = par_loops(n);
+        let mob: Vec<(f64, f64)> = if pl {
+            s.par_iter().with_min_len(PAR_MIN_LEN).map(|&v| self.mob(v)).collect()
+        } else {
+            s.iter().map(|&v| self.mob(v)).collect()
+        };
+        let pc: Vec<f64> = if pl {
+            s.par_iter().with_min_len(PAR_MIN_LEN).map(|&v| self.pc(v)).collect()
+        } else {
+            s.iter().map(|&v| self.pc(v)).collect()
+        };
+        let pf = par_loops(m.connections.len());
         let inj = self.c.krw_max / self.c.mu_w;
         // Wellbore densities.
         let rho_wb: Vec<f64> = self
@@ -366,19 +382,20 @@ impl Ctx<'_> {
         let mut comp: Vec<Vec<Option<(f64, f64)>>> = self.wells.iter().map(|w| vec![None; w.cells.len()]).collect();
         for _pass in 0..4 {
             // Face mobilities upwinded from `guess`.
-            let faces: Vec<(f64, f64)> = m
-                .connections
-                .iter()
-                .map(|cn| {
-                    let dz = self.z(cn.a) - self.z(cn.b);
-                    let dpw = guess[cn.a] - pc[cn.a] - guess[cn.b] + pc[cn.b] - rw * g * dz;
-                    let dpo = guess[cn.a] - guess[cn.b] - ro * g * dz;
-                    (
-                        if dpw >= 0.0 { mob[cn.a].0 } else { mob[cn.b].0 },
-                        if dpo >= 0.0 { mob[cn.a].1 } else { mob[cn.b].1 },
-                    )
-                })
-                .collect();
+            let face = |cn: &super::model::Connection| {
+                let dz = self.z(cn.a) - self.z(cn.b);
+                let dpw = guess[cn.a] - pc[cn.a] - guess[cn.b] + pc[cn.b] - rw * g * dz;
+                let dpo = guess[cn.a] - guess[cn.b] - ro * g * dz;
+                (
+                    if dpw >= 0.0 { mob[cn.a].0 } else { mob[cn.b].0 },
+                    if dpo >= 0.0 { mob[cn.a].1 } else { mob[cn.b].1 },
+                )
+            };
+            let faces: Vec<(f64, f64)> = if pf {
+                m.connections.par_iter().with_min_len(PAR_MIN_LEN).map(face).collect()
+            } else {
+                m.connections.iter().map(face).collect()
+            };
             let mut n_unk = n;
             let unk: Vec<Option<usize>> = self
                 .wells
@@ -393,12 +410,10 @@ impl Ctx<'_> {
                     }
                 })
                 .collect();
-            let mut lower: BTreeMap<(usize, usize), f64> = BTreeMap::new();
+            let mut lower = self.ent.lock().unwrap_or_else(|e| e.into_inner());
+            lower.clear();
             let mut rhs = vec![0.0; n_unk];
-            let mut add = |r: usize, c: usize, v: f64| {
-                let key = if r >= c { (r, c) } else { (c, r) };
-                *lower.entry(key).or_insert(0.0) += v;
-            };
+            let mut add = |r: usize, c: usize, v: f64| lower.add(r, c, v);
             for c in 0..n {
                 if !m.active[c] {
                     add(c, c, 1.0);
@@ -460,19 +475,27 @@ impl Ctx<'_> {
                     };
                 }
             }
-            let x = solve_spd(n_unk, &lower, rhs)?;
+            drop(add);
+            self.spd.lock().unwrap_or_else(|e| e.into_inner()).solve(n_unk, &lower, &mut rhs)?;
+            drop(lower);
+            let x = rhs;
             let p: Vec<f64> = (0..n)
                 .map(|c| if m.active[c] { x[c] } else { f64::NAN })
                 .collect();
             // Upwind consistency.
-            let consistent = m.connections.iter().zip(&faces).all(|(cn, &(lw, lo))| {
+            let ok_face = |(cn, &(lw, lo)): (&super::model::Connection, &(f64, f64))| {
                 let dz = self.z(cn.a) - self.z(cn.b);
                 let dpw = p[cn.a] - pc[cn.a] - p[cn.b] + pc[cn.b] - rw * g * dz;
                 let dpo = p[cn.a] - p[cn.b] - ro * g * dz;
                 let uw = if dpw >= 0.0 { mob[cn.a].0 } else { mob[cn.b].0 };
                 let uo = if dpo >= 0.0 { mob[cn.a].1 } else { mob[cn.b].1 };
                 uw == lw && uo == lo
-            });
+            };
+            let consistent = if pf {
+                m.connections.par_iter().zip(&faces).with_min_len(PAR_MIN_LEN).all(ok_face)
+            } else {
+                m.connections.iter().zip(&faces).all(ok_face)
+            };
             // Completion directions and crossflow mobilities from this solution.
             let mut bhp = Vec::new();
             let mut next_comp = Vec::with_capacity(self.wells.len());
@@ -530,13 +553,18 @@ impl Ctx<'_> {
                 comp = next_comp;
                 continue;
             }
-            let mut fw = Vec::with_capacity(faces.len());
-            let mut fo = Vec::with_capacity(faces.len());
-            for (cn, &(lw, lo)) in m.connections.iter().zip(&faces) {
+            let ff = |(cn, &(lw, lo)): (&super::model::Connection, &(f64, f64))| {
                 let dz = self.z(cn.a) - self.z(cn.b);
-                fw.push(cn.trans * lw * (p[cn.a] - pc[cn.a] - p[cn.b] + pc[cn.b] - rw * g * dz));
-                fo.push(cn.trans * lo * (p[cn.a] - p[cn.b] - ro * g * dz));
-            }
+                (
+                    cn.trans * lw * (p[cn.a] - pc[cn.a] - p[cn.b] + pc[cn.b] - rw * g * dz),
+                    cn.trans * lo * (p[cn.a] - p[cn.b] - ro * g * dz),
+                )
+            };
+            let (fw, fo): (Vec<f64>, Vec<f64>) = if pf {
+                m.connections.par_iter().zip(&faces).with_min_len(PAR_MIN_LEN).map(ff).unzip()
+            } else {
+                m.connections.iter().zip(&faces).map(ff).unzip()
+            };
             let mut well_w = Vec::new();
             let mut well_o = Vec::new();
             for (wi_, (w, wi)) in self.wells.iter().zip(&self.wis).enumerate() {
@@ -615,6 +643,44 @@ pub fn run_two_phase(
     times: &[f64],
     opts: &TwoPhaseOptions,
 ) -> SxResult<TwoPhaseResult> {
+    run_two_phase_with(model, wells, fixed, corey, physics, sw0, p0, times, opts, &mut ReportOptions::default())
+}
+
+/// [`run_two_phase`] with report-snapshot control: keep every N-th `sw` / `p`
+/// field, stream them to a sink, or both (see [`ReportOptions`]). Scalar
+/// series (BHP, rates, in-place volumes) keep every report time.
+///
+/// # Errors
+/// As [`run_two_phase`], plus errors returned by the sink.
+#[allow(clippy::too_many_arguments)]
+pub fn run_two_phase_with(
+    model: &FlowModel,
+    wells: &[FlowWell],
+    fixed: &[FixedPressure],
+    corey: &Corey,
+    physics: &Physics,
+    sw0: &[f64],
+    p0: &[f64],
+    times: &[f64],
+    opts: &TwoPhaseOptions,
+    report: &mut ReportOptions<'_>,
+) -> SxResult<TwoPhaseResult> {
+    with_threads(None, move || two_phase_impl(model, wells, fixed, corey, physics, sw0, p0, times, opts, report))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn two_phase_impl(
+    model: &FlowModel,
+    wells: &[FlowWell],
+    fixed: &[FixedPressure],
+    corey: &Corey,
+    physics: &Physics,
+    sw0: &[f64],
+    p0: &[f64],
+    times: &[f64],
+    opts: &TwoPhaseOptions,
+    report: &mut ReportOptions<'_>,
+) -> SxResult<TwoPhaseResult> {
     corey.validate()?;
     super::pressure::check_controls(wells, fixed)?;
     physics.validate()?;
@@ -683,6 +749,8 @@ pub fn run_two_phase(
         wis,
         z_ref,
         bw_fixed: opts.boundary_fw,
+        spd: Mutex::new(SpdCache::default()),
+        ent: Mutex::new(SpdEntries::default()),
     };
     let (smin, smax) = (corey.swc, 1.0 - corey.sor);
     let cap_diff = {
@@ -749,8 +817,10 @@ pub fn run_two_phase(
         smax,
     );
     let drho = (physics.rho_w - physics.rho_o).abs() * physics.gravity;
+    let rate_buf = RefCell::new(vec![0.0; n]);
     let dt_cfl = |st: &Step| -> f64 {
-        let mut rate = vec![0.0; n];
+        let mut rate = rate_buf.borrow_mut();
+        rate.fill(0.0);
         for (cn, (&fw, &fo)) in model.connections.iter().zip(st.fw.iter().zip(&st.fo)) {
             // Total-velocity speed, gravity segregation speed, capillary diffusion.
             let dz = (model.center[cn.a][2] - model.center[cn.b][2]).abs();
@@ -779,31 +849,38 @@ pub fn run_two_phase(
     let mut mo: Vec<f64> = (0..n)
         .map(|c| pv_at(c, p[c]) * (1.0 - s[c]) * bo(p[c]))
         .collect();
-    for &tr in times {
+    // Scratch reused across steps.
+    let mut verr_buf: Vec<f64> = if comp { vec![0.0; n] } else { Vec::new() };
+    let mut dmw = vec![0.0; n];
+    let mut dmo = vec![0.0; n];
+    let mut s_old = vec![0.0; n];
+    let n_rep = times.len();
+    for (i_rep, &tr) in times.iter().enumerate() {
         while t < tr {
-            let verr: Option<Vec<f64>> = comp.then(|| {
-                (0..n)
-                    .map(|c| {
-                        if model.active[c] && pv0[c] > 0.0 {
-                            pv_at(c, p[c]) - mw[c] / bw(p[c]) - mo[c] / bo(p[c])
-                        } else {
-                            0.0
-                        }
-                    })
-                    .collect()
-            });
+            let verr: Option<&[f64]> = if comp {
+                for (c, v) in verr_buf.iter_mut().enumerate() {
+                    *v = if model.active[c] && pv0[c] > 0.0 {
+                        pv_at(c, p[c]) - mw[c] / bw(p[c]) - mo[c] / bo(p[c])
+                    } else {
+                        0.0
+                    };
+                }
+                Some(&verr_buf)
+            } else {
+                None
+            };
             let mut dt = dt_next.min(opts.max_dt).min(tr - t);
             let mut st = ctx.solve(
                 &p,
                 &s,
                 last.as_ref().map_or(&p, |l| &l.p),
                 dt,
-                verr.as_deref(),
+                verr,
             )?;
             let lim = dt_cfl(&st);
             if dt > lim * 1.0001 {
                 dt = lim.min(tr - t);
-                st = ctx.solve(&p, &s, &st.p, dt, verr.as_deref())?;
+                st = ctx.solve(&p, &s, &st.p, dt, verr)?;
             }
             // Pressure-change control repeats a step that overshoots 2× the target.
             if opts.dp_target.is_finite() {
@@ -824,11 +901,11 @@ pub fn run_two_phase(
                     }
                     dt = shorter;
                     res.n_rejected += 1;
-                    st = ctx.solve(&p, &s, &st.p, dt, verr.as_deref())?;
+                    st = ctx.solve(&p, &s, &st.p, dt, verr)?;
                 }
             }
             // Water update.
-            let mut dmw = vec![0.0; n];
+            dmw.fill(0.0);
             for (cn, &f) in model.connections.iter().zip(&st.fw) {
                 let up = if f >= 0.0 { cn.a } else { cn.b };
                 let m = f * bw(st.p[up]);
@@ -842,7 +919,7 @@ pub fn run_two_phase(
                     net_in += dt * m;
                 }
             }
-            let mut dmo = vec![0.0; n];
+            dmo.fill(0.0);
             for (cn, &f) in model.connections.iter().zip(&st.fo) {
                 let up = if f >= 0.0 { cn.a } else { cn.b };
                 let m = f * bo(st.p[up]);
@@ -866,7 +943,7 @@ pub fn run_two_phase(
                 dmw[f.cell] += m;
                 net_in += dt * m;
             }
-            let s_old = s.clone();
+            s_old.copy_from_slice(&s);
             for c in 0..n {
                 if !model.active[c] || pv0[c] <= 0.0 {
                     continue;
@@ -928,8 +1005,13 @@ pub fn run_two_phase(
             .push(st.well_w.iter().map(|v| v.iter().sum()).collect());
         res.oil_rate
             .push(st.well_o.iter().map(|v| v.iter().sum()).collect());
-        res.p.push(p.clone());
-        res.sw.push(s.clone());
+        if report.keeps(i_rep, n_rep) {
+            report.emit(&Snapshot { index: i_rep, time: tr, fields: &[("sw", &s), ("p", &p)] })?;
+            if report.in_memory {
+                res.p.push(p.clone());
+                res.sw.push(s.clone());
+            }
+        }
         res.water_in_place.push(if comp {
             (0..n).filter(|&c| model.active[c]).map(|c| mw[c]).sum()
         } else {
