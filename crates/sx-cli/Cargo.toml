@@ -1,0 +1,20 @@
+[package]
+name = "sx-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "subsurfix"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.6.7", features = ["derive"] }
+serde_json = "1.0.154"
+sx-core = { path = "../sx-core" }
+tracing-subscriber = "0.3.23"
+
+[dev-dependencies]
+sx-testutil = { path = "../sx-testutil" }
+tempfile = "3.27.0"

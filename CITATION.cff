@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "SubsurfiX"
+abstract: "A tool for automation in subsurface geological/petrophysical analysis and geomodeling workflows: well-log quality control, gap filling and correlation, gridding, geostatistics and flow simulation, with a Rust core and a Python interface."
+type: software
+authors:
+  - family-names: Lai
+    given-names: "Larry Syu-Heng"
+    orcid: "https://orcid.org/0000-0003-4589-9729"
+repository-code: "https://github.com/GeoLarryLai/SubsurfiX"
+license: AGPL-3.0-or-later
+version: "0.1.0"
+date-released: "2026-10-31"
+keywords:
+  - well logs
+  - petrophysics
+  - stratigraphic correlation
+  - dynamic time warping
+  - geostatistics
+  - reservoir simulation
+  - geomodeling
+# doi: add the Zenodo DOI after the first archived release

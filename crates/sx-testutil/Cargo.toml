@@ -1,0 +1,13 @@
+[package]
+name = "sx-testutil"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde_json = "1.0.154"
+sx-core = { path = "../sx-core" }
+
+[dev-dependencies]
+tempfile = "3.27.0"

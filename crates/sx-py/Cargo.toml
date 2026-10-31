@@ -1,0 +1,20 @@
+[package]
+name = "sx-py"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+
+[features]
+testing = ["dep:sx-testutil"]
+
+[dependencies]
+numpy = "0.30.0"
+pyo3 = { version = "0.30.1", features = ["extension-module"] }
+sx-core = { path = "../sx-core" }
+sx-testutil = { path = "../sx-testutil", optional = true }
+tracing-subscriber = "0.3.23"
