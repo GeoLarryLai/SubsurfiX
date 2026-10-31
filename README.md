@@ -6,11 +6,10 @@
 
 v0.1.0
 
-From a folder of well logs to a checked, correlated log set and a 3D property model you can run flow and heat
-simulations on. Rust engine, driven from Python or the command line.
+> [!WARNING]
+> **SubsurfiX** is under active development, and many functions are still experimental and not fully validated. Please use with caution.
 
-Status: early-stage research software. macOS arm64 wheels are on PyPI; other platforms build from the sdist
-(needs Rust, cmake and a C++ compiler). APIs may change; check results before use.
+**SubsurfiX** takes you from a folder of well logs to a checked, correlated log set and a 3D property model you can run flow and heat simulations on. I built it because these steps usually live in separate tools, and every hand-off (cleaning logs, filling gaps, correlating wells, gridding, simulating) is where things get lost or quietly changed. Here it's one project file and one run: every filled value carries a provenance code, so you always know what was measured and what was filled. The engine is in Rust, and you drive it from Python or the command line.
 
 ## Installation
 
@@ -35,30 +34,29 @@ Tests: `cargo test --workspace`, then `maturin develop -r --features testing` an
 Lai, L.S.-H. (2026) SubsurfiX. *Zenodo*, [https://doi.org/10.5281/zenodo.23832007](https://doi.org/10.5281/zenodo.23832007)
 
 ![3D porosity model built from 60 Kansas wells](image/hero_3d_porosity_model.png)
+*A 3D porosity model built from 60 Kansas wells, the end product of the whole workflow.*
 
-## Key Features
+## What it can do
 
-- **QC and gap fill:** reads LAS files and surveys, masks bad intervals, and fills gaps (rules + LightGBM) with a
-  provenance code on every value.
-- **Well correlation:** DTW between neighbouring wells, solved as one network for all wells
-  ([Wheeler and Hale, 2014](https://doi.org/10.1190/segam2014-0227.1);
-  [Sylvester, 2023](https://doi.org/10.1111/bre.12787); [Samant et al., 2025](https://doi.org/10.1029/2024PA005082)).
-- **Grids and properties:** regular or corner-point (GRDECL) grids, upscaling, kriging, SGS, SIS and ML P10/P50/P90.
-- **Flow and heat:** pressure, tracer, two-phase water/oil and heat transport; export to OpenGeoSys (`.vtu`).
+- Read LAS files and surveys, mask bad intervals, and fill gaps (rules + LightGBM), tagging every value with a provenance code
+- Correlate wells with DTW between neighbouring wells, solved as one network for all wells ([Wheeler and Hale, 2014](https://doi.org/10.1190/segam2014-0227.1); [Sylvester, 2023](https://doi.org/10.1111/bre.12787); [Samant et al., 2025](https://doi.org/10.1029/2024PA005082))
+- Build regular or corner-point (GRDECL) grids, upscale, and estimate properties by kriging, SGS, SIS or ML (P10/P50/P90)
+- Run pressure, tracer, two-phase water/oil and heat transport, and export to OpenGeoSys (`.vtu`)
+- Run from Python (`sx.Project(...).run()`) or the command line (`subsurfix run --config project.toml`), with a built-in synthetic demo project that needs no data
 
 ## Examples
 
 ![Raw, QC'd and gap-filled logs](image/ex_qc_gap_fill.png)
-*One Kansas well: raw log (grey), what QC kept (black) and filled samples (red).*
+*One Kansas well, showing the raw log (grey), what QC kept (black) and the filled samples (red), so you can see exactly what was touched.*
 
 ![Well correlation section](image/ex_well_correlation.png)
-*West–east section: GR on elevation (left) and on correlated layer time (right), where beds line up.*
+*A west–east section with GR plotted on elevation (left) and on correlated layer time (right). On the right, the beds line up.*
 
 ![Porosity maps of one layer](image/ex_property_maps.png)
-*Porosity in one layer by kriging, SGS, SIS and ML propagation.*
+*Porosity in one layer mapped four ways (kriging, SGS, SIS and ML propagation), side by side for comparison.*
 
 ![Geothermal doublet](image/ex_heat_doublet.png)
-*Heat transport check against Ogata–Banks, and the cold front of an injector–producer doublet through time.*
+*A heat transport check against the Ogata–Banks solution, plus the cold front of an injector–producer doublet moving through time.*
 
 One executed notebook per step on open data (Kansas Geological Survey, FORCE 2020): see
 [`examples/README.md`](examples/README.md). `scripts/` fetches the data.
