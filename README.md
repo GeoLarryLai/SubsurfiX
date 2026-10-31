@@ -6,8 +6,6 @@
 
 v0.1.0
 
-![3D porosity model built from 60 Kansas wells](image/hero_3d_porosity_model.png)
-
 From a folder of well logs to a checked, correlated log set and a 3D property model you can run flow and heat
 simulations on. Rust engine, driven from Python or the command line.
 
@@ -36,6 +34,8 @@ Tests: `cargo test --workspace`, then `maturin develop -r --features testing` an
 
 Lai, L.S.-H. (2026) SubsurfiX. *Zenodo*, [https://doi.org/10.5281/zenodo.ZENODO_CONCEPT_DOI](https://doi.org/10.5281/zenodo.ZENODO_CONCEPT_DOI)
 
+![3D porosity model built from 60 Kansas wells](image/hero_3d_porosity_model.png)
+
 ## Key Features
 
 - **QC and gap fill:** reads LAS files and surveys, masks bad intervals, and fills gaps (rules + LightGBM) with a
@@ -46,7 +46,7 @@ Lai, L.S.-H. (2026) SubsurfiX. *Zenodo*, [https://doi.org/10.5281/zenodo.ZENODO_
 - **Grids and properties:** regular or corner-point (GRDECL) grids, upscaling, kriging, SGS, SIS and ML P10/P50/P90.
 - **Flow and heat:** pressure, tracer, two-phase water/oil and heat transport; export to OpenGeoSys (`.vtu`).
 
-## Results
+## Examples
 
 ![Raw, QC'd and gap-filled logs](image/ex_qc_gap_fill.png)
 *One Kansas well: raw log (grey), what QC kept (black) and filled samples (red).*
