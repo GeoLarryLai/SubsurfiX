@@ -2,17 +2,41 @@
 
 # SubsurfiX
 
-[![PyPI version](https://img.shields.io/pypi/v/subsurfix.svg)](https://pypi.org/project/subsurfix/) [![pepy downloads](https://static.pepy.tech/badge/subsurfix)](https://pepy.tech/project/subsurfix)
+[![PyPI version](https://img.shields.io/pypi/v/subsurfix.svg)](https://pypi.org/project/subsurfix/) [![pepy downloads](https://static.pepy.tech/badge/subsurfix)](https://pepy.tech/project/subsurfix) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.ZENODO_CONCEPT_DOI.svg)](https://doi.org/10.5281/zenodo.ZENODO_CONCEPT_DOI)
+
+v0.1.0
 
 ![3D porosity model built from 60 Kansas wells](image/hero_3d_porosity_model.png)
 
 From a folder of well logs to a checked, correlated log set and a 3D property model you can run flow and heat
 simulations on. Rust engine, driven from Python or the command line.
 
-Status: 0.1.0, early-stage research software. macOS arm64 wheels are on PyPI; other platforms build from the sdist
+Status: early-stage research software. macOS arm64 wheels are on PyPI; other platforms build from the sdist
 (needs Rust, cmake and a C++ compiler). APIs may change; check results before use.
 
-## What it does
+## Installation
+
+```bash
+pip install subsurfix
+```
+
+Prebuilt wheels are for macOS arm64; elsewhere pip builds from source, which needs Rust (stable), Python 3.10+, a C/C++ compiler and libclang (for the LightGBM build). To build from a clone:
+
+```bash
+git clone https://github.com/GeoLarryLai/SubsurfiX subsurfix && cd subsurfix
+python -m venv .venv && . .venv/bin/activate
+pip install maturin numpy pyarrow pandas pyproj
+maturin develop -r                                    # builds subsurfix._native
+pip install matplotlib lasio jupyter python-calamine  # optional: notebooks, .xls PTS files
+```
+
+Tests: `cargo test --workspace`, then `maturin develop -r --features testing` and `python -m pytest tests/python -q`.
+
+## Citation
+
+Lai, L.S.-H. (2026) SubsurfiX. *Zenodo*, [https://doi.org/10.5281/zenodo.ZENODO_CONCEPT_DOI](https://doi.org/10.5281/zenodo.ZENODO_CONCEPT_DOI)
+
+## Key Features
 
 - **QC and gap fill:** reads LAS files and surveys, masks bad intervals, and fills gaps (rules + LightGBM) with a
   provenance code on every value.
@@ -39,20 +63,6 @@ Status: 0.1.0, early-stage research software. macOS arm64 wheels are on PyPI; ot
 One executed notebook per step on open data (Kansas Geological Survey, FORCE 2020): see
 [`examples/README.md`](examples/README.md). `scripts/` fetches the data.
 
-## Install
-
-Needs Rust (stable), Python 3.10+, a C/C++ compiler and libclang (for the LightGBM build).
-
-```bash
-git clone https://github.com/GeoLarryLai/SubsurfiX subsurfix && cd subsurfix
-python -m venv .venv && . .venv/bin/activate
-pip install maturin numpy pyarrow pandas pyproj
-maturin develop -r                                    # builds subsurfix._native
-pip install matplotlib lasio jupyter python-calamine  # optional: notebooks, .xls PTS files
-```
-
-Tests: `cargo test --workspace`, then `maturin develop -r --features testing` and `python -m pytest tests/python -q`.
-
 ## Quick start
 
 ```python
@@ -77,12 +87,6 @@ Log workflow: [Gonzalez et al. (2023)](https://www.tgs.com/technical-library/mac
 Flow and heat: [open-DARTS](https://gitlab.com/open-darts/open-darts), [OpenGeoSys](https://www.opengeosys.org),
 [OPM](https://opm-project.org). Data credits are in `NOTICE`.
 
-## How to cite
-
-> Lai, L. S.-H. (2026). SubsurfiX (version 0.1.0) [Computer software]. https://github.com/GeoLarryLai/SubsurfiX
-
-Full metadata is in [`CITATION.cff`](CITATION.cff) (GitHub's "Cite this repository" button).
-
-## Licence
+## License
 
 Copyright (C) 2026 Larry Syu-Heng Lai. AGPL-3.0-or-later; see `LICENSE`.
