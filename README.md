@@ -10,7 +10,7 @@
 > [!WARNING]
 > **SubsurfiX** is under active development, and many functions are still experimental and not fully validated. Please use with caution.
 
-**SubsurfiX** is developed to automate workflows for subsurface geological analysis and reservoir modeling, including (1) machine-learning (ML) or statistically assisted well-log quality control (QC) and data-gap prediction, (2) core-to-log calibration and 3D property modeling, (3) stratigraphic correlation and top picking, and (4) flow and heat simulations for injection–production purposes. The engine is written in [Rust](https://www.rust-lang.org/) and wrapped in a Python skin.
+**SubsurfiX** is developed to automate workflows for subsurface geological analysis and reservoir modeling, including (1) machine-learning (ML) or statistically assisted well-log quality control (QC) and data-gap prediction, (2) core-to-log calibration and 3D property modeling, (3) Dynamic Time Warping (DTW) assisted stratigraphic correlation between wells, and (4) flow and heat simulations for injection–production purposes. The engine is written in [Rust](https://www.rust-lang.org/) and wrapped in a Python skin.
 
 ## Installation
 
