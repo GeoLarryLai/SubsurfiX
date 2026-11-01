@@ -51,6 +51,9 @@ fn result_dict<'py>(py: Python<'py>, r: FimResult, ph: &dyn OblPhysics, n: usize
     d.set_item("n_newton", r.n_newton)?;
     d.set_item("n_table_points", r.n_table_points)?;
     d.set_item("n_fallbacks", r.n_fallbacks)?;
+    d.set_item("n_linear_solves", r.linear.n_solves)?;
+    d.set_item("n_linear_iterations", r.linear.n_iterations)?;
+    d.set_item("n_linear_fallbacks", r.linear.n_fallbacks)?;
     Ok(d)
 }
 
@@ -67,7 +70,9 @@ fn options(
     dt_min: f64,
     max_newton: usize,
     tol: f64,
+    linear_solver: &str,
 ) -> PyResult<FimOptions> {
+    let linear_solver = flow::LinearSolver::from_name(linear_solver).ok_or_else(|| PyValueError::new_err(format!("linear_solver must be 'iterative' or 'direct', got {linear_solver:?}")))?;
     if table_points.len() != nv {
         return Err(PyValueError::new_err(format!("table_points needs {nv} values")));
     }
@@ -86,6 +91,7 @@ fn options(
         dt_min,
         max_newton,
         tol,
+        linear_solver,
         ..FimOptions::default()
     })
 }
@@ -103,7 +109,7 @@ fn options(
 /// kg/s, + = into the reservoir), mass_in_place, mass_net_in (n_t, 2; kg),
 /// n_steps, n_cuts, n_newton, n_table_points.
 #[pyfunction]
-#[pyo3(signature = (model, wells, sw0, p0, times, corey=None, physics=None, injection=None, p_range=(1e5, 1e8), table_points=(32, 256), dt_init=86400.0, dt_max=30.0*86400.0, dt_min=1e-3, max_newton=20, tol=1e-6))]
+#[pyo3(signature = (model, wells, sw0, p0, times, corey=None, physics=None, injection=None, p_range=(1e5, 1e8), table_points=(32, 256), dt_init=86400.0, dt_max=30.0*86400.0, dt_min=1e-3, max_newton=20, tol=1e-6, linear_solver="iterative"))]
 #[allow(clippy::too_many_arguments)]
 pub fn run_fim_water_oil<'py>(
     py: Python<'py>,
@@ -122,6 +128,7 @@ pub fn run_fim_water_oil<'py>(
     dt_min: f64,
     max_newton: usize,
     tol: f64,
+    linear_solver: &str,
 ) -> PyResult<Bound<'py, PyDict>> {
     let ws = wells_of(wells)?;
     let c = corey_of(corey)?;
@@ -138,7 +145,7 @@ pub fn run_fim_water_oil<'py>(
         Some(_) => return Err(PyValueError::new_err("injection needs one water mass fraction per well")),
         None => ws.iter().map(|w| vec![if w.kind == WellKind::Injector { 1.0 } else { 0.0 }]).collect(),
     };
-    let opts = options(2, p_range, vec![table_points.0, table_points.1], vec![1.0], inj, pp.gravity, dt_init, dt_max, dt_min, max_newton, tol)?;
+    let opts = options(2, p_range, vec![table_points.0, table_points.1], vec![1.0], inj, pp.gravity, dt_init, dt_max, dt_min, max_newton, tol, linear_solver)?;
     let m = &model.m;
     let r = py.detach(|| flow::run_fim(m, &ws, &ph, &state0, &times, &opts)).map_err(to_py_err)?;
     result_dict(py, r, &ph, n, ws.len())
@@ -154,7 +161,7 @@ pub fn run_fim_water_oil<'py>(
 /// `kr_max`. No capillary pressure. Returns the same dict as
 /// `run_fim_water_oil` with 3 phases/components.
 #[pyfunction]
-#[pyo3(signature = (model, wells, p0, zg0, zo0, times, pvt, rho_sc=(0.9, 850.0, 1020.0), bw=1.0, c_w=4e-10, mu_w=5e-4, s_res=(0.05, 0.15, 0.2), n_exp=(2.0, 2.0, 2.0), kr_max=(0.8, 0.9, 0.4), c_o_undersat=1.5e-9, c_rock=0.0, p_ref=1e5, gravity=0.0, injection=None, p_range=(1e5, 5e7), table_points=(64, 101, 101), z_gas_max=1.0, dt_init=86400.0, dt_max=30.0*86400.0, dt_min=1e-3, max_newton=20, tol=1e-6))]
+#[pyo3(signature = (model, wells, p0, zg0, zo0, times, pvt, rho_sc=(0.9, 850.0, 1020.0), bw=1.0, c_w=4e-10, mu_w=5e-4, s_res=(0.05, 0.15, 0.2), n_exp=(2.0, 2.0, 2.0), kr_max=(0.8, 0.9, 0.4), c_o_undersat=1.5e-9, c_rock=0.0, p_ref=1e5, gravity=0.0, injection=None, p_range=(1e5, 5e7), table_points=(64, 101, 101), z_gas_max=1.0, dt_init=86400.0, dt_max=30.0*86400.0, dt_min=1e-3, max_newton=20, tol=1e-6, linear_solver="iterative"))]
 #[allow(clippy::too_many_arguments)]
 pub fn run_fim_black_oil<'py>(
     py: Python<'py>,
@@ -185,6 +192,7 @@ pub fn run_fim_black_oil<'py>(
     dt_min: f64,
     max_newton: usize,
     tol: f64,
+    linear_solver: &str,
 ) -> PyResult<Bound<'py, PyDict>> {
     let ws = wells_of(wells)?;
     let t = pvt.as_array();
@@ -221,7 +229,7 @@ pub fn run_fim_black_oil<'py>(
         Some(_) => return Err(PyValueError::new_err("injection needs one (zg, zo) per well")),
         None => ws.iter().map(|_| vec![0.0, 0.0]).collect(),
     };
-    let opts = options(3, p_range, vec![table_points.0, table_points.1, table_points.2], vec![z_gas_max, 1.0], inj, gravity, dt_init, dt_max, dt_min, max_newton, tol)?;
+    let opts = options(3, p_range, vec![table_points.0, table_points.1, table_points.2], vec![z_gas_max, 1.0], inj, gravity, dt_init, dt_max, dt_min, max_newton, tol, linear_solver)?;
     let m = &model.m;
     let r = py.detach(|| flow::run_fim(m, &ws, &ph, &state0, &times, &opts)).map_err(to_py_err)?;
     result_dict(py, r, &ph, n, ws.len())
@@ -282,7 +290,7 @@ fn thermal_injection(ws: &[flow::FlowWell], inj_t: Option<Vec<f64>>, t0: &[f64])
 /// (failed flashes that used fallback values; a RuntimeWarning is issued
 /// when nonzero).
 #[pyfunction]
-#[pyo3(signature = (model, wells, p0, z0, times, temperature=323.15, m_nacl=0.0, solubility_model="spycher_pruess_2005", thermal=false, t0=None, injection_temperature=None, injection=None, s_res=(0.2, 0.05), n_exp=(2.0, 2.0), kr_max=(1.0, 1.0), c_rock=0.0, p_ref=1e5, rock=None, gravity=0.0, p_range=(1e5, 4e7), t_range=(285.15, 373.15), table_points=None, dt_init=3600.0, dt_max=30.0*86400.0, dt_min=1e-3, max_newton=20, tol=1e-6))]
+#[pyo3(signature = (model, wells, p0, z0, times, temperature=323.15, m_nacl=0.0, solubility_model="spycher_pruess_2005", thermal=false, t0=None, injection_temperature=None, injection=None, s_res=(0.2, 0.05), n_exp=(2.0, 2.0), kr_max=(1.0, 1.0), c_rock=0.0, p_ref=1e5, rock=None, gravity=0.0, p_range=(1e5, 4e7), t_range=(285.15, 373.15), table_points=None, dt_init=3600.0, dt_max=30.0*86400.0, dt_min=1e-3, max_newton=20, tol=1e-6, linear_solver="iterative"))]
 #[allow(clippy::too_many_arguments)]
 pub fn run_fim_co2_brine<'py>(
     py: Python<'py>,
@@ -313,6 +321,7 @@ pub fn run_fim_co2_brine<'py>(
     dt_min: f64,
     max_newton: usize,
     tol: f64,
+    linear_solver: &str,
 ) -> PyResult<Bound<'py, PyDict>> {
     let ws = wells_of(wells)?;
     let mut ph = Co2Brine::new(m_nacl, crate::co2::model_of(solubility_model)?, thermal, temperature);
@@ -352,7 +361,7 @@ pub fn run_fim_co2_brine<'py>(
         }
         (zi.iter().map(|&z| vec![z]).collect(), (0..n).flat_map(|i| [p0[i], z0[i]]).collect())
     };
-    let mut opts = options(nv, p_range, tp, vec![1.0; nv - 1], inj, gravity, dt_init, dt_max, dt_min, max_newton, tol)?;
+    let mut opts = options(nv, p_range, tp, vec![1.0; nv - 1], inj, gravity, dt_init, dt_max, dt_min, max_newton, tol, linear_solver)?;
     if thermal {
         opts.table_lo[2] = t_range.0;
         opts.table_hi[2] = t_range.1;
@@ -371,7 +380,7 @@ pub fn run_fim_co2_brine<'py>(
 /// `run_fim_water_oil` with `temperature` (n_t, n), components (water,
 /// energy; energy rates W, energy in place J) and `n_fallbacks`.
 #[pyfunction]
-#[pyo3(signature = (model, wells, p0, t0, times, injection_temperature=None, rock=None, c_rock=0.0, p_ref=1e5, gravity=0.0, p_range=(1e5, 5e7), t_range=(275.0, 420.0), table_points=(32, 146), dt_init=3600.0, dt_max=30.0*86400.0, dt_min=1e-3, max_newton=20, tol=1e-6))]
+#[pyo3(signature = (model, wells, p0, t0, times, injection_temperature=None, rock=None, c_rock=0.0, p_ref=1e5, gravity=0.0, p_range=(1e5, 5e7), t_range=(275.0, 420.0), table_points=(32, 146), dt_init=3600.0, dt_max=30.0*86400.0, dt_min=1e-3, max_newton=20, tol=1e-6, linear_solver="iterative"))]
 #[allow(clippy::too_many_arguments)]
 pub fn run_fim_thermal_water<'py>(
     py: Python<'py>,
@@ -393,6 +402,7 @@ pub fn run_fim_thermal_water<'py>(
     dt_min: f64,
     max_newton: usize,
     tol: f64,
+    linear_solver: &str,
 ) -> PyResult<Bound<'py, PyDict>> {
     let ws = wells_of(wells)?;
     let ph = ThermalWater::new(rock_of(rock)?, c_rock, p_ref);
@@ -404,7 +414,7 @@ pub fn run_fim_thermal_water<'py>(
     let ti = thermal_injection(&ws, injection_temperature, t0)?;
     let inj: Vec<Vec<f64>> = ti.iter().map(|&t| vec![t]).collect();
     let state0: Vec<f64> = (0..n).flat_map(|i| [p0[i], t0[i]]).collect();
-    let mut opts = options(2, p_range, vec![table_points.0, table_points.1], vec![1.0], inj, gravity, dt_init, dt_max, dt_min, max_newton, tol)?;
+    let mut opts = options(2, p_range, vec![table_points.0, table_points.1], vec![1.0], inj, gravity, dt_init, dt_max, dt_min, max_newton, tol, linear_solver)?;
     opts.table_lo[1] = t_range.0;
     opts.table_hi[1] = t_range.1;
     let m = &model.m;

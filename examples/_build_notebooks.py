@@ -99,20 +99,50 @@ fin = pq.read_table(PROJ / "export/logs_final.parquet", columns=["well_id", "k",
 print(len(wells), "wells;", int(tops.suspect.sum()), "of", len(tops), "tops flagged suspect")
 tops.groupby("top_name").agg(n=("md_ft", "size"), suspect=("suspect", "sum"), mean_elev_ft=("elev_ft", "mean")).sort_values("mean_elev_ft", ascending=False)""",
 """md:## West–east section
-Left: GR on elevation with three tops. Right: the same curves on `layer_time`, where correlated beds line up.""",
+Eight wells from west to east, GR curves (black) between 3,000 and 3,700 ft below sea level, with the KGS formation
+tops named in the legend. Right: the same curves on `layer_time`, the relative geological time from the
+correlation: each top is an anchor (`layer_time` = top number + 1) and the DTW alignment fills in between, so this
+is a Wheeler-style (chronostratigraphic) view in which correlated beds line up. Left: the same correlation on depth;
+each colour band joins one `layer_time` interval (0.25 wide) between neighbouring wells, coloured by the mean GR of
+that interval over the eight wells.""",
 """sel = wells.sort_values("x_m").iloc[:: max(1, len(wells) // 8)].head(8)
 d = fin.merge(lt, on=["well_id", "k"]).merge(geo[["well_id", "k", "elev_ft"]], on=["well_id", "k"])
-colors = {"Heebner": "tab:blue", "Mississippian": "tab:red", "Viola": "tab:green"}
-fig, axs = plt.subplots(1, 2, figsize=(11, 6))
-for i, w in enumerate(sel.well_id):
-    s = d[(d.well_id == w) & (d.elev_ft < -3000) & (d.elev_ft > -3700)]
+d = d[(d.elev_ft < -3000) & (d.elev_ft > -3700)]
+names = tops.groupby("top_name").agg(e=("elev_ft", "mean"), t=("top_index", "first")).sort_values("e", ascending=False)
+names = names[(names.e < -2990) & (names.e > -3700)]                     # tops inside the window
+tcol = dict(zip(names.index, plt.cm.tab20(np.arange(len(names)) % 20)))
+levels = np.arange(np.floor(d.layer_time.min()), np.ceil(d.layer_time.max()) + 1e-9, 0.25)
+gr_band = d.groupby(np.digitize(d.layer_time, levels)).gr_api.mean()         # mean GR of each correlated interval
+norm = plt.Normalize(30, 120); band_cmap = plt.cm.YlOrBr
+def elev_at(s, lv):                                                     # depth of a layer_time level in one well
+    s = s.dropna(subset=["layer_time"]).sort_values("layer_time")
+    return np.interp(lv, s.layer_time, s.elev_ft, left=np.nan, right=np.nan)
+fig, axs = plt.subplots(1, 2, figsize=(12, 6.5), layout="constrained")
+per = [d[d.well_id == w] for w in sel.well_id]
+for i in range(len(per) - 1):                                            # correlated intervals between neighbours
+    ea, eb = elev_at(per[i], levels), elev_at(per[i + 1], levels)
+    for m in range(len(levels) - 1):
+        q = [ea[m], eb[m], eb[m + 1], ea[m + 1]]
+        if np.all(np.isfinite(q)) and (m + 1) in gr_band.index:
+            axs[0].fill([i + 0.45, i + 1.45, i + 1.45, i + 0.45], q, color=band_cmap(norm(gr_band[m + 1])), alpha=0.45, lw=0)
+for i, s in enumerate(per):
     g = (s.gr_api.clip(0, 150) / 150) * 0.9 + i
     axs[0].plot(g, s.elev_ft, lw=0.5, color="k"); axs[1].plot(g, s.layer_time, ".", ms=0.6, color="k")
-    for _, row in tops[(tops.well_id == w) & tops.top_name.isin(list(colors))].iterrows():
-        axs[0].plot([i, i + 0.9], [row.elev_ft] * 2, color=colors[row.top_name], lw=1.5)
-axs[0].set_ylabel("elevation (ft)"); axs[1].set_ylabel("layer_time"); axs[1].invert_yaxis()
-for ax, t in zip(axs, ["on depth", "on layer_time"]):
+    for _, row in tops[(tops.well_id == s.well_id.iloc[0]) & tops.top_name.isin(list(tcol))].iterrows():
+        axs[0].plot([i, i + 0.9], [row.elev_ft] * 2, color=tcol[row.top_name], lw=1.8)
+for n, r in names.iterrows():                                            # tops are the anchors: layer_time = index + 1
+    axs[1].axhline(r.t + 1, color=tcol[n], lw=1.2, alpha=0.8)
+for m in range(len(levels) - 1):
+    if (m + 1) in gr_band.index:
+        axs[1].axhspan(levels[m], levels[m + 1], color=band_cmap(norm(gr_band[m + 1])), alpha=0.45, lw=0, zorder=0)
+axs[0].set_ylabel("elevation (ft, relative to sea level)"); axs[1].set_ylabel("relative geological time (layer_time)")
+axs[0].set_ylim(-3720, -2980); axs[1].set_ylim(d.layer_time.max() + 0.2, d.layer_time.min() - 0.2)
+for ax, t in zip(axs, ["on depth: colour bands join the same layer_time between wells", "on relative geological time (Wheeler-style)"]):
     ax.set_title(t, fontsize=10); ax.set_xticks(np.arange(len(sel)) + 0.45); ax.set_xticklabels(sel.well_id, fontsize=7)
+    ax.set_xlabel("well_id, west to east")
+fig.legend([plt.Line2D([], [], color=tcol[n], lw=2) for n in names.index], list(names.index), loc="outside lower center",
+           ncol=min(len(names), 6), fontsize=8, title="formation tops (KGS picks)", title_fontsize=8)
+fig.colorbar(plt.cm.ScalarMappable(norm, band_cmap), ax=axs, shrink=0.6, label="mean GR of the correlated interval (API)")
 save(fig, "02_correlation_section.png")""",
 """md:## Top consistency
 Spread of each top among neighboring wells after correlation; large spreads point to tops worth checking.""",
@@ -215,18 +245,57 @@ cfg = sx.Project(PROJ / "project.toml").config["propagation"]
 X = np.column_stack([C, ok])
 q = nat.ml_propagation(X[idx], phi_up, X, model=cfg["method"], quantiles=cfg["quantiles"], n_trees=cfg["qrf_trees"], min_leaf=3, seed=3)
 print("SGS", real.shape, "| SIS", fac.shape, "| ML quantiles", q.shape)""",
-"""md:## Maps of one layer""",
+"""md:## Maps of one layer
+Grid layer 5, 20-25 m below the Mississippian top (the top of the Mississippian carbonates, mapped in notebook 03;
+952-1029 m below sea level in these 60 wells). The four copper panels share one porosity scale (0-0.2).""",
 """k = 4
 sh = lambda v: np.asarray(v).reshape(dims[2], dims[1], dims[0])[k]
 ext = [origin[0], origin[0] + dims[0] * cell[0], origin[1], origin[1] + dims[1] * cell[1]]
-panels = [("kriging", sh(ok)), ("kriging variance", sh(okv)), ("SGS #1", sh(real[0])), ("SGS mean of 8", sh(real.mean(0))),
-          ("SIS #1 (clean = 1)", sh(fac[0])), ("ML P50", sh(q[:, len(cfg["quantiles"]) // 2]))]
-fig, axs = plt.subplots(2, 3, figsize=(11, 7))
-for ax, (t, v) in zip(axs.flat, panels):
-    im = ax.imshow(v, origin="lower", extent=ext, cmap="Paired" if "SIS" in t else "viridis")
-    ax.set_title(t, fontsize=9); fig.colorbar(im, ax=ax, shrink=0.7)
-fig.suptitle(f"Porosity, layer {k} ({k * 5}-{k * 5 + 5} m below the Mississippian top)")
+lay = np.asarray(idx) // (dims[0] * dims[1]) == k
+cond = C[np.asarray(idx)[lay]][:, :2]                                   # cells with well data in this layer
+from matplotlib.colors import ListedColormap
+# panels grouped by method: one framed box per method, no line inside a method
+groups = [("Kriging (one run)", [("estimate", sh(ok), "phi"), ("variance", sh(okv), "var")]),
+          ("ML: quantile regression forest", [("P50 (median)", sh(q[:, len(cfg["quantiles"]) // 2]), "phi")]),
+          ("SGS: sequential Gaussian simulation", [("realization 1", sh(real[0]), "phi"), ("mean of 8 realizations", sh(real.mean(0)), "phi")]),
+          ("SIS: sequential indicator simulation", [("realization 1, clean-rock indicator", sh(fac[0]), "sis")])]
+fig = plt.figure(figsize=(11, 9.2), layout="constrained")
+rows = fig.subfigures(2, 1, hspace=0.04)
+boxes = [b for r in rows for b in r.subfigures(1, 2, width_ratios=[2, 1], wspace=0.03)]
+for box, (gname, panels) in zip(boxes, groups):
+    box.set_edgecolor("#444444"); box.set_linewidth(1.2)        # frame: one box per method
+    box.suptitle(gname, fontsize=10.5, fontweight="bold")
+    for sf, (t, v, kind) in zip(box.subfigures(1, len(panels), wspace=0.02) if len(panels) > 1 else [box], panels):
+        ax = sf.subplots()
+        if kind == "phi":
+            im = ax.imshow(v, origin="lower", extent=ext, cmap="copper", vmin=0.0, vmax=0.2)
+            cb = sf.colorbar(im, ax=ax, location="bottom", shrink=0.85, ticks=[0, 0.1, 0.2])
+            cb.set_label("porosity" + (" (above 0.2 shown as 0.2)" if float(np.nanmax(v)) > 0.2 else ""), fontsize=8)
+        elif kind == "var":
+            im = ax.imshow(v, origin="lower", extent=ext, cmap="Purples")
+            cb = sf.colorbar(im, ax=ax, location="bottom", shrink=0.85)
+            cb.set_label("kriging variance (porosity²)", fontsize=8)
+        else:
+            im = ax.imshow(v, origin="lower", extent=ext, cmap=ListedColormap(["#5a5a5a", "#e8d39a"]), vmin=-0.5, vmax=1.5)
+            cb = sf.colorbar(im, ax=ax, location="bottom", shrink=0.85, ticks=[0, 1])
+            cb.ax.set_xticklabels(["tight", "clean"]); cb.set_label("clean rock: GR < 60 API", fontsize=8)
+        cb.ax.tick_params(labelsize=8)
+        ax.plot(cond[:, 0], cond[:, 1], "^", ms=4, mfc="white", mec="black", mew=0.6)
+        ax.set_title(t, fontsize=9.5); ax.set_aspect("equal"); ax.tick_params(labelsize=7)
+        ax.set_xlabel("easting (m)", fontsize=8); ax.set_ylabel("northing (m)", fontsize=8)
+fig.suptitle(f"Porosity of grid layer {k + 1} ({k * 5}-{k * 5 + 5} m below the Mississippian top); triangles: well data in this layer", fontsize=11)
+fig.text(0.5, -0.015, "Easting and northing: project frame (UTM zone 14N, EPSG:32614, metres) with 0, 0 at the mean surface "
+         "location of the 60 wells.", ha="center", va="top", fontsize=8)
 save(fig, "04_property_maps.png")""",
+"""md:| Map | What it is | Follows |
+|---|---|---|
+| Kriging | The best linear estimate from nearby wells, weighted by the fitted variogram; smooth. | [Matheron 1963](https://doi.org/10.2113/gsecongeo.58.8.1246); Journel & Huijbregts 1978, *Mining Geostatistics* |
+| Kriging variance | How uncertain the kriging estimate is: low at wells, high far from them. | as kriging |
+| SGS | Sequential Gaussian simulation: one equally likely map with the data's spread and variogram; the mean of many approaches kriging. | Deutsch & Journel 1998, *GSLIB* (2nd ed.); [Gómez-Hernández & Journel 1993](https://doi.org/10.1007/978-94-011-1739-5_8) |
+| SIS | Sequential indicator simulation of a category, here clean (GR < 60 API) or tight rock. | [Journel 1983](https://doi.org/10.1007/BF01031292); Deutsch & Journel 1998, *GSLIB* |
+| ML P50 | Median of a quantile regression forest trained on the cells the wells cross, with position and kriging as inputs. | Meinshausen 2006, *Quantile Regression Forests*, JMLR 7 |
+
+All five are SubsurfiX's own Rust implementations based on these methods, not wrappers of another package.""",
 """md:## Save the model
 SGS realization 1 and SIS realization 1 are used by notebooks 05 and 08.""",
 """np.savez_compressed(OUT / "property_model.npz", phi=real[0], clean=fac[0], ok=ok)

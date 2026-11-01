@@ -63,3 +63,99 @@ def kansas_model(data_dir: str | Path | None = None, kv_kh: float = 0.1) -> dict
     m = kansas_window(0, 0, nx, ny, nz, data_dir=d, kv_kh=kv_kh)
     m["source"] = "Kansas Geological Survey (KGS) property model, whole grid"
     return m
+
+
+#: Columns left inactive by :func:`kansas_structural`: the south-east block (i >= 14, j <= 11, 8 x 12 columns,
+#: about 4 x 6 km) has no well in it, so the porosity there is extrapolated; leaving it out gives the L-shaped
+#: model outline that the wells support.
+NOTCH = (14, 11)
+
+
+def kansas_structural(data_dir: str | Path | None = None, kv_kh: float = 0.1, notch: tuple[int, int] | None = NOTCH) -> dict:
+    """The whole KGS model on its structural top, with the unsupported south-east block inactive.
+
+    Same porosity and permeability as :func:`kansas_model`. Adds ``xs``, ``ys`` (node coordinates),
+    ``top_nodes`` ((ny + 1) x (nx + 1) top depths from notebook 03, m below the surface), ``active`` (per cell,
+    natural order) and ``grid``, a :class:`subsurfix.CornerPointGrid` whose 12 layers of 5 m follow the top
+    surface (cell depths per corner, not flat boxes). Inactive cells keep their place in the cell numbering.
+    """
+    from subsurfix import _native as nat
+
+    d = Path(data_dir) if data_dir is not None else DATA
+    m = kansas_model(data_dir=d, kv_kh=kv_kh)
+    g = np.load(d / "grid_upscaled.npz")
+    nx, ny, nz = m["dims"]
+    dz = m["cell"][2]
+    xs, ys = np.asarray(g["xs"], float), np.asarray(g["ys"], float)
+    top = np.asarray(g["top"], float).reshape(ny + 1, nx + 1)
+    act2 = np.ones((ny, nx), dtype=np.int32)
+    if notch is not None:
+        act2[: notch[1] + 1, notch[0]:] = 0
+    active = np.tile(act2.ravel(), nz)
+    surfaces = np.array([top.ravel() + dz * k for k in range(nz + 1)])
+    g0 = nat.CornerPointGrid.from_surfaces(xs, ys, surfaces)
+    m["grid"] = nat.CornerPointGrid(tuple(int(v) for v in m["dims"]), g0.coord, g0.zcorn, active)
+    m.update(xs=xs, ys=ys, top_nodes=top, active=active.astype(bool),
+             source="Kansas Geological Survey (KGS) property model on its structural top, south-east block inactive")
+    return m
+
+
+def section_along(bm: dict, a: tuple[int, int], b: tuple[int, int], extend: int = 2) -> dict:
+    """Columns of active cells on the straight line from column ``a`` to column ``b`` (extended by ``extend``
+    columns past both ends) for the ``section`` option of ``subsurfix.viz3d.animate_layered``; ``distance`` is
+    measured from column ``a``."""
+    nx, ny, nz = (int(v) for v in bm["dims"])
+    dx, dy, dz = (float(v) for v in bm["cell"])
+    tn = np.asarray(bm["top_nodes"], float)
+    tops = 0.25 * (tn[:-1, :-1] + tn[1:, :-1] + tn[:-1, 1:] + tn[1:, 1:])
+    act = np.asarray(bm["active"], bool)
+    va = np.subtract(b, a, dtype=float)
+    length = float(np.hypot(va[0] * dx, va[1] * dy))
+    n = int(np.ceil(max(abs(va[0]), abs(va[1]))))
+    cols, dist, top = [], [], []
+    for t in np.arange(-extend, n + extend + 1) / max(n, 1):
+        i, j = (int(round(v)) for v in np.add(a, t * va))
+        if not (0 <= i < nx and 0 <= j < ny) or (cols and cols[-1][0] == i + nx * j):
+            continue
+        cells = [i + nx * (j + ny * k) for k in range(nz)]
+        if not act[cells[0]]:
+            continue
+        cols.append(cells)
+        dist.append(t * length)
+        top.append(float(tops[j, i]))
+    return {"columns": cols, "distance": dist, "tops": top, "dz": dz, "length": length}
+
+
+_COMPASS = ["E", "NE", "N", "NW", "W", "SW", "S", "SE"]
+
+
+def section_wells(bm: dict, inj: tuple[int, int], prod: tuple[int, int], inj_open, prod_open, extend: int = 2) -> dict:
+    """``section_along`` between an injector and a producer, oriented so the more northern (then more eastern)
+    end is on the right whatever the well order; adds the wells and the compass names of both ends."""
+    a, b = (inj, prod) if (prod[1] - inj[1], prod[0] - inj[0]) >= (0, 0) else (prod, inj)
+    sec = section_along(bm, a, b, extend)
+    ang = np.degrees(np.arctan2(b[1] - a[1], b[0] - a[0]))
+    right = _COMPASS[int(np.round(ang / 45.0)) % 8]
+    left = _COMPASS[(int(np.round(ang / 45.0)) + 4) % 8]
+    d_inj = 0.0 if a == inj else sec["length"]
+    sec["wells"] = [(d_inj, *inj_open, "#1f4e9c", "INJ"), (sec["length"] - d_inj, *prod_open, "#b2182b", "PROD")]
+    sec["ends"] = (left, right)
+    sec["title"] = f"cross-section {left} to {right} through the wells"
+    return sec
+
+
+#: footer note for the grey base of the Kansas animations
+BG_NOTE = {"permeability": "log permeability (darker = lower)",
+           "porosity": "porosity (darker = tighter rock)"}
+
+
+def background_args(bm, a) -> dict:
+    """``animate_layered`` keywords for the grey base: permeability (log, 1-1000 mD; default) or porosity
+    (0.06-0.26), from the ``--background`` / ``--no-background`` options of the Kansas scripts."""
+    if getattr(a, "no_background", False):
+        return {"background": None}
+    if getattr(a, "background", "permeability") == "porosity":
+        return {"background": np.asarray(bm["phi"], float), "background_clim": (0.06, 0.26),
+                "background_label": "porosity"}
+    return {"background": np.asarray(bm["k_md"], float), "background_clim": (1.0, 1000.0), "background_log": True,
+            "background_label": "permeability (mD)"}

@@ -47,26 +47,47 @@ class HeatDoublet:
         "rho_fluid": 1000.0, "cp_fluid": 4180.0, "rho_rock": 2650.0, "cp_rock": 900.0, "cond_fluid": 0.6, "cond_rock": 2.5})
     viscosity: float = 5e-4
     dt_max: float = 86400.0
+    #: optional depth (m, positive down) of the top of each column, shape (ny, nx) with j as the row; replaces
+    #: the flat ``origin[2]`` so the layers follow a structural surface (MODFLOW 6 DIS with per-cell elevations)
+    top: np.ndarray | None = None
+    #: optional per-cell activity (natural order); inactive cells get IDOMAIN 0
+    active: np.ndarray | None = None
 
 
-def regular_grid_to_dis(origin, cell, dims) -> dict[str, Any]:
+#: IMS settings of the steady multi-aquifer-well flow solve. ``"tight"`` (default, the earlier values) converges
+#: heads to 1e-9 m; ``"normal"`` uses customary MODFLOW 6 closure values, needed on large grids where the tight
+#: criteria are not reached.
+MAW_IMS = {
+    "tight": {"outer_dvclose": 1e-9, "inner_dvclose": 1e-10, "rcloserecord": [1e-10, "RELATIVE_RCLOSE"]},
+    "normal": {"outer_dvclose": 1e-5, "inner_dvclose": 1e-6, "rcloserecord": [1e-3, "RELATIVE_RCLOSE"]},
+}
+
+
+def regular_grid_to_dis(origin, cell, dims, top=None, active=None) -> dict[str, Any]:
     """SubsurfiX regular grid to MODFLOW 6 DIS keywords. Depth (z down) becomes elevation (top = -z0).
 
     Returns ``nlay, nrow, ncol, delr, delc, top, botm, xorigin, yorigin`` and ``index``, a function from a
     SubsurfiX cell id to a MODFLOW (layer, row, col). MODFLOW rows run north to south, so row = ny-1-j.
+    ``top`` (column top depths, (ny, nx)) and ``active`` (per cell) are optional; see :class:`HeatDoublet`.
     """
     nx, ny, nz = (int(d) for d in dims)
     dx, dy, dz = (float(c) for c in cell)
-    top = -float(origin[2])
-    botm = np.array([top - dz * (k + 1) for k in range(nz)])
+    if top is None:
+        top_el = np.full((ny, nx), -float(origin[2]))
+    else:
+        top_el = -np.asarray(top, float).reshape(ny, nx)[::-1, :]
+    botm = np.array([top_el - dz * (k + 1) for k in range(nz)])
 
     def index(c: int) -> tuple[int, int, int]:
         i, j, k = c % nx, (c // nx) % ny, c // (nx * ny)
         return k, ny - 1 - j, i
 
-    return {"nlay": nz, "nrow": ny, "ncol": nx, "delr": dx, "delc": dy, "top": top,
-                "botm": botm[:, None, None] * np.ones((nz, ny, nx)), "xorigin": float(origin[0]),
-                "yorigin": float(origin[1]), "index": index}
+    out = {"nlay": nz, "nrow": ny, "ncol": nx, "delr": dx, "delc": dy,
+           "top": float(top_el[0, 0]) if top is None else top_el, "botm": botm, "xorigin": float(origin[0]),
+           "yorigin": float(origin[1]), "index": index}
+    if active is not None:
+        out["idomain"] = to_layered(np.asarray(active, bool).astype(int), dims).astype(int)
+    return out
 
 
 def to_layered(a, dims) -> np.ndarray:
@@ -87,12 +108,12 @@ def find_mf6() -> str | None:
     return _find_exe("mf6")
 
 
-def build_gwf_gwe(case: HeatDoublet, ws: str | Path, exe: str | None = None):
+def build_gwf_gwe(case: HeatDoublet, ws: str | Path, exe: str | None = None, tolerance: str = "tight"):
     """Write a coupled GWF+GWE simulation for ``case`` into ``ws``; returns the FloPy simulation."""
     import flopy
 
     p = case.props
-    d = regular_grid_to_dis(case.origin, case.cell, case.dims)
+    d = regular_grid_to_dis(case.origin, case.cell, case.dims, case.top, case.active)
     idx = d.pop("index")
     xo, yo = d.pop("xorigin"), d.pop("yorigin")
     kfac = p["rho_fluid"] * G / case.viscosity
@@ -119,7 +140,7 @@ def build_gwf_gwe(case: HeatDoublet, ws: str | Path, exe: str | None = None):
     flopy.mf6.ModflowGwfsto(gwf, steady_state={0: True}, iconvert=0, ss=0.0, sy=0.0)
     wel, chd = [], []
     if multi:
-        wel, chd = _maw_split(case, Path(ws) / "maw_split", exe, d, idx, xo, yo, k_hyd, perm3, kfac)
+        wel, chd = _maw_split(case, Path(ws) / "maw_split", exe, d, idx, xo, yo, k_hyd, perm3, kfac, tolerance)
     for w, tw in zip([] if multi else case.wells, case.well_temp):
         for c in w["cells"]:
             if w["kind"] == "injector":
@@ -150,7 +171,7 @@ def build_gwf_gwe(case: HeatDoublet, ws: str | Path, exe: str | None = None):
     return sim
 
 
-def _maw_split(case: HeatDoublet, ws: Path, exe, d, idx, xo, yo, k_hyd, perm3, kfac):
+def _maw_split(case: HeatDoublet, ws: Path, exe, d, idx, xo, yo, k_hyd, perm3, kfac, tolerance: str = "tight"):
     """Steady MODFLOW 6 flow run with multi-aquifer wells; returns WEL rows (per-connection rates, with the
     injection temperature) and one CHD row (a producer cell at its simulated head) for the GWE run."""
     import flopy
@@ -158,8 +179,7 @@ def _maw_split(case: HeatDoublet, ws: Path, exe, d, idx, xo, yo, k_hyd, perm3, k
     ws.mkdir(parents=True, exist_ok=True)
     sim = flopy.mf6.MFSimulation(sim_name="split", sim_ws=str(ws), exe_name=exe or find_mf6() or "mf6")
     flopy.mf6.ModflowTdis(sim, nper=1, perioddata=[(1.0, 1, 1.0)], time_units="seconds")
-    flopy.mf6.ModflowIms(sim, complexity="moderate", linear_acceleration="bicgstab", outer_dvclose=1e-9,
-                         inner_dvclose=1e-10, rcloserecord=[1e-10, "RELATIVE_RCLOSE"], outer_maximum=200,
+    flopy.mf6.ModflowIms(sim, complexity="moderate", linear_acceleration="bicgstab", **MAW_IMS[tolerance], outer_maximum=200,
                          inner_maximum=1000)
     gwf = flopy.mf6.ModflowGwf(sim, modelname="gwf", save_flows=True)
     flopy.mf6.ModflowGwfdis(gwf, length_units="meters", xorigin=xo, yorigin=yo, **d)
@@ -202,16 +222,21 @@ def _add_maw(gwf, case: HeatDoublet, idx, perm3: np.ndarray, kfac: float) -> Non
     from subsurfix import _native as nat
 
     dx, dy, dz = (float(c) for c in case.cell)
-    top = -float(case.origin[2])
+    nx, ny, _ = case.dims
+    tops = (np.full((ny, nx), float(case.origin[2])) if case.top is None
+            else np.asarray(case.top, float).reshape(ny, nx))
+
+    def col_top(c: int) -> float:  # elevation of the column top
+        return -float(tops[(c // nx) % ny, c % nx])
     pkg, conn, per = [], [], []
     for iw, w in enumerate(case.wells):
         rw, skin = float(w.get("radius", 0.1)), float(w.get("skin", 0.0))
         cells = [int(c) for c in w["cells"]]
         wi = w.get("wi") or [nat.peaceman_wi(perm3[c, 0], perm3[c, 1], dx, dy, dz, rw, skin) for c in cells]
         kk = [idx(c)[0] for c in cells]
-        pkg.append([iw, rw, top - dz * (max(kk) + 1), 0.0, "SPECIFIED", len(cells)])
+        pkg.append([iw, rw, min(col_top(c) for c in cells) - dz * (max(kk) + 1), 0.0, "SPECIFIED", len(cells)])
         for ic, c in enumerate(cells):
-            ztop = top - dz * idx(c)[0]
+            ztop = col_top(c) - dz * idx(c)[0]
             conn.append([iw, ic, idx(c), ztop, ztop - dz, float(wi[ic]) * kfac, rw])
         if w["kind"] == "injector" or "bhp" not in w:
             q = float(w["rate"])
@@ -222,12 +247,14 @@ def _add_maw(gwf, case: HeatDoublet, idx, perm3: np.ndarray, kfac: float) -> Non
                             perioddata={0: per}, pname="MAW-1")
 
 
-def run_gwf_gwe(case: HeatDoublet, ws: str | Path, exe: str | None = None) -> dict[str, Any]:
-    """Build and run; returns ``times`` (s) and ``temperature`` (n_times, n_cells) in SubsurfiX order."""
+def run_gwf_gwe(case: HeatDoublet, ws: str | Path, exe: str | None = None, tolerance: str = "tight") -> dict[str, Any]:
+    """Build and run; returns ``times`` (s) and ``temperature`` (n_times, n_cells) in SubsurfiX order.
+
+    ``tolerance`` selects the steady well-flow closure (:data:`MAW_IMS`)."""
     import flopy
 
     Path(ws).mkdir(parents=True, exist_ok=True)
-    sim = build_gwf_gwe(case, ws, exe)
+    sim = build_gwf_gwe(case, ws, exe, tolerance)
     sim.write_simulation(silent=True)
     ok, buff = sim.run_simulation(silent=True)
     if not ok:

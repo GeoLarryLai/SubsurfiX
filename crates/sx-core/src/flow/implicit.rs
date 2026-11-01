@@ -51,14 +51,15 @@
 //! * Aziz, K., Settari, A. (1979). Petroleum Reservoir Simulation.
 //!
 //! Status: experimental prototype; energy (thermal) assembly is new and only
-//! lightly tested. Not yet benchmarked against open-DARTS or
-//! OpenGeoSys; see `docs/multiphase_fim.md`.
+//! lightly tested. Not benchmarked against open-DARTS;
+//! see `docs/multiphase_fim.md`.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use faer::prelude::Solve;
 use faer::sparse::{SparseColMat, Triplet};
+
+use super::linsolve::{FimLinear, LinearSolver, LinearStats};
 use faer::Mat;
 
 use super::model::FlowModel;
@@ -219,6 +220,9 @@ impl<'a> OblTable<'a> {
     /// (n_ops × n_vars, row-major) at `x` (clamped into the box).
     pub fn interpolate(&self, x: &[f64], val: &mut [f64], grad: &mut [f64]) {
         let nv = x.len();
+        if nv <= 8 {
+            return self.interpolate_fast(x, val, grad);
+        }
         let mut base = vec![0usize; nv];
         let mut f = vec![0.0; nv];
         for d in 0..nv {
@@ -241,6 +245,58 @@ impl<'a> OblTable<'a> {
             #[allow(clippy::needless_range_loop)]
             for d in 0..nv {
                 // ∂w/∂x_d: replace factor d by ±1/h.
+                let mut dw = if (corner >> d) & 1 == 1 { 1.0 } else { -1.0 } / self.h[d];
+                for e in 0..nv {
+                    if e != d {
+                        dw *= if (corner >> e) & 1 == 1 { f[e] } else { 1.0 - f[e] };
+                    }
+                }
+                for o in 0..self.n_ops {
+                    grad[o * nv + d] += dw * v[o];
+                }
+            }
+            for o in 0..self.n_ops {
+                val[o] += w * v[o];
+            }
+        }
+    }
+
+    /// Same arithmetic as the general path, without per-call allocations
+    /// and without cloning the cached node values.
+    fn interpolate_fast(&self, x: &[f64], val: &mut [f64], grad: &mut [f64]) {
+        let nv = x.len();
+        let mut base = [0usize; 8];
+        let mut f = [0.0f64; 8];
+        for d in 0..nv {
+            let t = ((x[d] - self.lo[d]) / self.h[d]).clamp(0.0, (self.n[d] - 1) as f64);
+            let i = (t.floor() as usize).min(self.n[d] - 2);
+            base[d] = i;
+            f[d] = t - i as f64;
+        }
+        val.iter_mut().for_each(|v| *v = 0.0);
+        grad.iter_mut().for_each(|v| *v = 0.0);
+        let mut idx = [0usize; 8];
+        for corner in 0..(1usize << nv) {
+            let mut w = 1.0;
+            for d in 0..nv {
+                let bit = (corner >> d) & 1;
+                idx[d] = base[d] + bit;
+                w *= if bit == 1 { f[d] } else { 1.0 - f[d] };
+            }
+            let mut key = 0usize;
+            for d in (0..nv).rev() {
+                key = key * self.n[d] + idx[d];
+            }
+            if !self.cache.borrow().contains_key(&key) {
+                let xn: Vec<f64> = idx[..nv].iter().enumerate().map(|(d, &i)| self.lo[d] + self.h[d] * i as f64).collect();
+                let mut out = vec![0.0; self.n_ops].into_boxed_slice();
+                self.phys.evaluate(&xn, &mut out);
+                self.cache.borrow_mut().insert(key, out);
+            }
+            let cache = self.cache.borrow();
+            let v = &cache[&key];
+            #[allow(clippy::needless_range_loop)]
+            for d in 0..nv {
                 let mut dw = if (corner >> d) & 1 == 1 { 1.0 } else { -1.0 } / self.h[d];
                 for e in 0..nv {
                     if e != d {
@@ -289,6 +345,10 @@ pub struct FimOptions {
     pub max_dz: f64,
     /// Largest temperature change per Newton iteration (K, thermal only).
     pub max_dtemp: f64,
+    /// Linear solver of the Newton system (default: CPR-preconditioned
+    /// GMRES with a direct-LU fallback; [`LinearSolver::Direct`] for the
+    /// exact sparse LU).
+    pub linear_solver: LinearSolver,
 }
 
 impl Default for FimOptions {
@@ -308,6 +368,7 @@ impl Default for FimOptions {
             tol: 1e-6,
             max_dz: 0.2,
             max_dtemp: 20.0,
+            linear_solver: LinearSolver::default(),
         }
     }
 }
@@ -343,6 +404,8 @@ pub struct FimResult {
     /// ([`OblPhysics::n_fallbacks`]); nonzero means some table nodes are
     /// not the physics' own values.
     pub n_fallbacks: usize,
+    /// Linear solves, GMRES iterations and direct-LU fallbacks.
+    pub linear: LinearStats,
 }
 
 struct WellData {
@@ -383,6 +446,13 @@ fn eval_all(table: &OblTable, x: &[f64], n: usize, nv: usize, n_ops: usize) -> V
 /// with `V_r` = bulk − pore volume and the conductance `G` the series
 /// combination of the half-cell conductances `κ_cell · geom`. An injector stream then lists `z…` and the injection
 /// temperature. Energy rates are W, energy in place J (fluid + rock).
+/// Cached Jacobian sparsity: triplet indices, symbolic structure and argsort.
+type JacPattern = (
+    Vec<faer::sparse::Pair<usize, usize>>,
+    faer::sparse::SymbolicSparseColMat<usize>,
+    faer::sparse::Argsort<usize>,
+);
+
 pub fn run_fim(
     model: &FlowModel,
     wells: &[FlowWell],
@@ -460,6 +530,7 @@ pub fn run_fim(
         n_newton: 0,
         n_table_points: 0,
         n_fallbacks: 0,
+        linear: LinearStats::default(),
     };
     let mut net_in = vec![0.0; nv];
     let mut last_rates = vec![0.0; nw * nv];
@@ -485,6 +556,15 @@ pub fn run_fim(
         res.mass_in_place.push(mass_of(&ev));
         res.mass_net_in.push(net.to_vec());
     };
+    let mut lin = FimLinear::new(opts.linear_solver, nv, n);
+    // Jacobian sparsity cache: when the triplet index sequence repeats, reuse
+    // faer's symbolic structure and argsort (same summation order as
+    // `try_new_from_triplets`, so identical values).
+    let mut pat: Option<JacPattern> = None;
+    let mut jac_cap = 0usize;
+    let mut pat_miss = 0usize;
+    let mut clamp_fails = 0usize;
+    let mut tm = [0.0f64; 5]; // eval, assemble, csc+symbolic, numeric+solve, total
     let mut ctrl: Vec<WellControl> = wd.iter().map(|w| w.control).collect();
     for &t_out in times {
         while t < t_out - 1e-9 * t_out.max(1.0) {
@@ -510,11 +590,15 @@ pub fn run_fim(
             let mut ok = false;
             let mut rates = vec![0.0; nw * nv];
             let (mut prev_err, mut relax) = (f64::INFINITY, 1.0f64);
+            let mut clamped: Option<(usize, usize, f64)> = None;
             for _it in 0..opts.max_newton {
                 res.n_newton += 1;
+                let t0 = std::time::Instant::now();
                 let ev = eval_all(&table, &x, n, nv, n_ops);
+                let t1 = std::time::Instant::now();
+                tm[0] += (t1 - t0).as_secs_f64();
                 let mut r = vec![0.0; nu];
-                let mut jac: Vec<Triplet<usize, usize, f64>> = Vec::new();
+                let mut jac: Vec<Triplet<usize, usize, f64>> = Vec::with_capacity(jac_cap);
                 // Accumulation.
                 for i in 0..n {
                     if !model.active[i] {
@@ -724,6 +808,7 @@ pub fn run_fim(
                     break;
                 }
                 if err < opts.tol {
+                    dbg_lazy(|| format!("conv t {t:.4e} dt {step:.4e} it {_it} err {err:.3e}"));
                     ok = true;
                     break;
                 }
@@ -731,15 +816,36 @@ pub fn run_fim(
                 // operators: halve the update while the residual stalls.
                 relax = if err > 0.9 * prev_err { (relax * 0.5).max(1.0 / 16.0) } else { (relax * 2.0).min(1.0) };
                 prev_err = err;
+                let t2 = std::time::Instant::now();
+                tm[1] += (t2 - t1).as_secs_f64();
                 if jac.iter().any(|t| !t.val.is_finite()) {
                     break;
                 }
-                let a = match SparseColMat::<usize, f64>::try_new_from_triplets(nu, nu, &jac) { Ok(a) => a, Err(e) => { dbg_msg(&format!("matrix: {e:?}")); break } };
-                let lu = match a.sp_lu() { Ok(l) => l, Err(e) => { dbg_msg(&format!("lu: {e:?}")); break } };
-                let rhs = Mat::<f64>::from_fn(nu, 1, |i, _| -r[i]);
-                let dx = lu.solve(&rhs);
+                jac_cap = jac_cap.max(jac.len());
+                let a = {
+                    let same = pat.as_ref().is_some_and(|(ix, _, _)| ix.len() == jac.len() && ix.iter().zip(&jac).all(|(p, t)| p.row == t.row && p.col == t.col));
+                    if !same {
+                        pat_miss += 1;
+                        let ix: Vec<faer::sparse::Pair<usize, usize>> = jac.iter().map(|t| faer::sparse::Pair { row: t.row, col: t.col }).collect();
+                        match faer::sparse::SymbolicSparseColMat::<usize>::try_new_from_indices(nu, nu, &ix) {
+                            Ok((sym, ord)) => pat = Some((ix, sym, ord)),
+                            Err(e) => { dbg_lazy(|| format!("matrix: {e:?}")); break }
+                        }
+                    }
+                    let (_, sym, ord) = pat.as_ref().expect("pattern set");
+                    let vals: Vec<f64> = jac.iter().map(|t| t.val).collect();
+                    match SparseColMat::<usize, f64>::new_from_argsort(sym.clone(), ord, &vals) { Ok(a) => a, Err(e) => { dbg_lazy(|| format!("matrix: {e:?}")); break } }
+                };
+                let t3 = std::time::Instant::now();
+                tm[2] += (t3 - t2).as_secs_f64();
+                let mut dx = Mat::<f64>::from_fn(nu, 1, |i, _| -r[i]);
+                if let Err(e) = lin.solve(&a, &mut dx, super::solver::par_for(nu)) {
+                    dbg_lazy(|| e);
+                    break;
+                }
+                tm[3] += t3.elapsed().as_secs_f64();
                 if (0..nu).any(|i| !dx[(i, 0)].is_finite()) {
-                    dbg_msg("non-finite update");
+                    dbg_lazy(|| "non-finite update".to_string());
                     break;
                 }
                 // Update chopping on the fractions.
@@ -757,13 +863,20 @@ pub fn run_fim(
                 if maxdt * scale > opts.max_dtemp {
                     scale = opts.max_dtemp / maxdt;
                 }
+                clamped = None;
                 for i in 0..n {
                     for d in 0..nv {
                         let v = x[i * nv + d] + scale * dx[(i * nv + d, 0)];
-                        x[i * nv + d] = v.clamp(zlo[d], zhi[d]);
+                        let c = v.clamp(zlo[d], zhi[d]);
+                        // Pressure (and temperature) outside the OBL table box:
+                        // remember it, a stalled step caused by it is reported.
+                        if c != v && (d == 0 || (th && d == ie)) {
+                            clamped = Some((i, d, v));
+                        }
+                        x[i * nv + d] = c;
                     }
                 }
-                dbg_msg(&format!("dp max {:.3e} dbhp {:?} scale {scale}", (0..n).map(|i| dx[(i * nv, 0)].abs()).fold(0.0, f64::max), (0..nw).map(|w| dx[(n * nv + w, 0)]).collect::<Vec<_>>()));
+                dbg_lazy(|| format!("dp max {:.3e} dbhp {:?} scale {scale}", (0..n).map(|i| dx[(i * nv, 0)].abs()).fold(0.0, f64::max), (0..nw).map(|w| dx[(n * nv + w, 0)]).collect::<Vec<_>>()));
                 for w in 0..nw {
                     bhp_try[w] += scale * dx[(n * nv + w, 0)];
                 }
@@ -791,10 +904,23 @@ pub fn run_fim(
                 bhp = bhp_try;
                 t += step;
                 res.n_steps += 1;
+                clamp_fails = 0;
                 dt = (step * opts.dt_growth).min(opts.dt_max).max(dt);
             } else {
+                dbg_lazy(|| format!("CUT t {t:.4e} dt {step:.4e} last_err {prev_err:.3e}"));
                 x = xn;
                 res.n_cuts += 1;
+                // A step that keeps failing while the Newton update pushes the
+                // state out of the table box cannot be rescued by smaller
+                // steps: fail with the cause instead of shrinking dt to dt_min.
+                clamp_fails = if clamped.is_some() { clamp_fails + 1 } else { 0 };
+                if let (Some((i, d, v)), true) = (clamped, clamp_fails >= CLAMP_FAILS) {
+                    let (what, unit, sc) = if d == 0 { ("pressure", "MPa", 1e-6) } else { ("temperature", "K", 1.0) };
+                    return Err(SxError::Numerical(format!(
+                        "fim: {what} left the OBL table range [{:.4}, {:.4}] {unit} (cell {i}, Newton update {:.4} {unit}) at t = {t:.6e} s in {CLAMP_FAILS} successive failed steps; widen {} or lower the well rates",
+                        zlo[d] * sc, zhi[d] * sc, v * sc, if d == 0 { "p_range" } else { "t_range" }
+                    )));
+                }
                 dt = step * opts.dt_cut;
                 if dt < opts.dt_min {
                     return Err(SxError::Numerical(format!("fim: Newton failed at t = {t:.6e} s with dt below dt_min")));
@@ -803,13 +929,24 @@ pub fn run_fim(
         }
         record(&mut res, t_out, &x, &bhp, &last_rates, &net_in);
     }
+    dbg_lazy(|| format!("timing eval {:.2} assemble {:.2} csc+symbolic {:.2} numeric+solve {:.2} s; symbolic rebuilds {}; jacobian pattern rebuilds {pat_miss}", tm[0], tm[1], tm[2], tm[3], lin.n_symbolic()));
+    dbg_lazy(|| format!("linear {:?}", lin.stats));
+    res.linear = lin.stats;
     res.n_table_points = table.n_evaluated();
     res.n_fallbacks = phys.n_fallbacks();
     Ok(res)
 }
 
-fn dbg_msg(m: &str) {
-    if std::env::var_os("SX_FIM_DEBUG").is_some() {
-        eprintln!("fim: {m}");
+/// Debug trace (`SX_FIM_DEBUG` set); the message is built only when tracing,
+/// and the environment is read once per process.
+/// Successive failed steps with the state clamped at the table box before
+/// [`run_fim`] gives up with an error naming the range.
+const CLAMP_FAILS: usize = 4;
+
+fn dbg_lazy(m: impl FnOnce() -> String) {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *ON.get_or_init(|| std::env::var_os("SX_FIM_DEBUG").is_some()) {
+        eprintln!("fim: {}", m());
     }
 }
+

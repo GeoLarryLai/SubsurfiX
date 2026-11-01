@@ -1,7 +1,7 @@
 # Flow diagnostics
 
 Flow diagnostics describe where injected fluid goes, and how fast, using a single converged flux field. There is
-no time stepping. The methods follow MRST's `diagnostics` module (Shahvali et al. 2012; Møyner, Krogstad and Lie
+no time stepping. The methods follow MRST's `diagnostics` module (MRST 2026a) (Shahvali et al. 2012; Møyner, Krogstad and Lie
 2015). The Rust code in `crates/sx-core/src/flow/diagnostics.rs` is derived from MRST (GPL-3.0-or-later,
 SINTEF Digital) and distributed under AGPL-3.0-or-later; see `NOTICE`.
 

@@ -32,7 +32,7 @@ Method notes: `docs/multiphase_fim.md`. Every number and figure below comes from
   (Peaceman well index, radius 0.1 m).
 - Injection: 0.008 m³/s at reservoir conditions for 40 years; results reported every 2 years.
 - Solver: fully implicit Newton with operator-based linearization (OBL). **Experimental**: not validated against
-  open-DARTS or OpenGeoSys on this grid.""",
+  open-DARTS on this grid.""",
 """md:## Setup""",
 """import os, time
 from pathlib import Path
@@ -278,6 +278,38 @@ for name, r in runs.items():
                 f"{np.abs(bal[name]).max():.1e} | {lab} {s[-1].max():.2f} | {np.asarray(r['bhp'])[-1, 0] / 1e6:.2f} MPa | "
                 f"{bt} | {tmin} |")
 display(Markdown("\\n".join(rows)))""",
+"""md:## Iterative versus direct linear solver
+Each Newton step of the fully implicit solver solves one large sparse linear system. By default this is done
+iteratively: GMRES with a two-stage CPR preconditioner (an algebraic multigrid solve on the cell pressures, then
+an ILU(0) sweep on all unknowns). The alternative, `linear_solver="direct"`, factorizes the whole matrix with a
+sparse LU. If GMRES ever fails to converge, that Newton step falls back to the direct LU automatically and the
+run reports it in `n_linear_fallbacks`.
+
+Both solvers solve the same equations to a tight tolerance (relative residual 1e-8), so the answers should agree
+to round-off and the time-step history should be identical. The cell below re-runs the four cases with the direct solver, in parallel
+processes (`subsurfix.parallel.run_cases`, using the same case setup stored in `fluid_cases.py`), and compares
+them with the iterative runs above.""",
+"""from fluid_cases import CASES
+from subsurfix.parallel import run_cases
+
+direct = run_cases({k: (f, {"linear_solver": "direct"}) for k, f in CASES.items()}, parallel=True)
+rows = ["| Case | Iterative | Direct | GMRES iterations | Fallbacks | Same steps / Newton | Max rel. Δp | Max Δ saturation |",
+        "|---|---|---|---|---|---|---|---|"]
+for k in CASES:
+    a, b = runs[k], direct.results[k]
+    pa, pb = np.asarray(a["p"]), np.asarray(b["p"])
+    dp = np.abs(pa - pb).max() / np.abs(pb).max()
+    ds = np.abs(np.asarray(a["saturation"]) - np.asarray(b["saturation"])).max()
+    same = (a["n_steps"], a["n_newton"]) == (b["n_steps"], b["n_newton"])
+    rows.append(f"| {k} | {RUNTIME[k]:.1f} s | {direct.seconds[k]:.1f} s | {a['n_linear_iterations']} | "
+                f"{a['n_linear_fallbacks']} | {'yes' if same else 'no'} | {dp:.1e} | {ds:.1e} |")
+display(Markdown("\\n".join(rows)))
+print(f"direct runs: {direct.processes} processes, wall {direct.wall_seconds:.1f} s "
+      f"(sum of case times {sum(direct.seconds.values()):.1f} s)")""",
+"""md:How to read the table: the differences are at round-off level (around 1e-11 or smaller), so the
+two solvers give the same answer. The iterative solver is the faster of the two here, and the gap grows with the
+size of the problem and the number of unknowns per cell. The last line shows the gain from running the four
+cases at once in separate processes instead of one after another.""",
 """md:## Limitations
 - Low injection rate: with unit permeabilities of 0.5–80 mD and an OBL table limited to 50 MPa, injection is
   kept at 0.008 m³/s, so only about 5 % of the pore volume is injected in 40 years and the plumes stay within
@@ -287,7 +319,7 @@ display(Markdown("\\n".join(rows)))""",
   Corey relative permeability without hysteresis.
 - The oil–gas plume cell count includes gas that comes out of solution near PROD, not only injected gas.
 - The cold-CO2 case is shown as temperature maps only; there is no GIF for it.
-- Experimental solver: not validated as equivalent to open-DARTS or OpenGeoSys.""",
+- Experimental solver: not validated as equivalent to open-DARTS.""",
 ]
 
 SNAP = """RES = {"Layered block": {"runs": runs, "RUNTIME": RUNTIME, "bal": bal, "PV": PV.sum(), "k_md": k_md, "phi": phi}}
@@ -339,6 +371,17 @@ kansas(cells[16]),
 kansas(cells[18]),
 "md:## 3D animations (Kansas)\nSame camera, colour scale and wells as the block GIFs.",
 kansas(cells[26]),
+"md:## Whole-model Kansas animations: what you can change\nThe README GIFs of the whole Kansas model (`scripts/kansas_fluids.py` for the three fluid cases and\n`scripts/make_methods_animation.py` for MODFLOW 6 against FIM-OBL) run on the structural grid from\n`examples/kansas_window.py` (`kansas_structural`: 12 layers of 5 m on the mapped top, the south-east block\nwithout wells inactive). Settings you can adjust on the command line:\n\n- Well locations: `--inj \"i,j;i,j\"` and `--prod \"i,j\"` (several wells separated by `;`; the rate is split over\n  the injectors). `--inj`/`--prod` columns must be active.\n- Perforated (open) layers: `--inj-layers 8-11` and `--prod-layers 0-3` (0 = top layer); the MODFLOW 6 well\n  connections use the same layers.\n- Rates: `--rate` (m³/s) and `--case-rates \"oil-gas=...,CO2-brine=...\"`; producer pressure per case with\n  `--case-bhp \"oil-gas=19.5\"` (MPa).\n- Run length and frames: `--years` (one frame every 2 years); `--times \"2:60:2\"` for the methods comparison.\n- MODFLOW 6 well-flow closure: `--mf6-tolerance normal` (or `tight`).\n- OBL table pressure range: `--p-max` (MPa) for the heat comparison; the fluid cases use 5–50 MPa (5–30 MPa for\n  oil-gas), so keep the injector pressure (reported as `inj_bhp_max_MPa`) inside it.
+- Colormaps (any matplotlib colormap name): `--cmap` (saturation, default `viridis_bright`: viridis without its dark end) in `kansas_fluids.py`;
+  `--cmap-pressure` (default `viridis_bright`) and `--cmap-temperature` (default `cold`) in
+  `make_methods_animation.py`; `--background-cmap` (faint porosity base, default `porosity_grey`: darker = tighter rock) in both,
+  `--no-background` to turn the base off;
+  `scripts/make_porosity_image.py --cmap` (porosity picture, default `copper`). In Python, `animate_layered`
+  takes `cmap` (or a per-panel `cmap` option) and `background_cmap`, as names or `Colormap` objects.
+- Look of the 3D panels: a faint greyscale porosity shell (`background`, `context_opacity`), with only cells whose
+  value changed by more than the threshold (`plume`, or `plume_frac` as a fraction of the largest change) drawn in
+  colour, more opaque for larger changes. Thresholds: `--p-above-background` (default 3 MPa above the median rise in each frame; `--p-threshold-abs` with `--p-threshold` for a fixed rise, `--p-threshold-frac` for a fraction of the peak), `--t-threshold`
+  (default 2 °C).",
 """md:## Results summary (Kansas)
 Built by the next cell from the Kansas runs above (nothing typed in by hand); same definitions as the block summary.""",
 kansas(cells[28]),

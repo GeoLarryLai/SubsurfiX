@@ -26,4 +26,14 @@ MRST attribution
   computeSweep.m). Copyright 2009-2026 SINTEF Digital, Mathematics & Cybernetics. GPL-3.0-or-later; distributed
   here under AGPL-3.0-or-later as above.
 
+Versions of the external sources (recorded because these projects keep changing)
+- MRST 2026a (GitHub SINTEF-AppliedCompSci/MRST, main at fa4ff98, 2026-10-09): source of the derived code above.
+- open-DARTS: methods only, from the publications cited in docs/multiphase_fim.md; latest release when accessed
+  on 2026-11-01: 2.1.0. No code copied.
+- OpenGeoSys: mesh-format target only (.vtu export); latest release when accessed on 2026-11-01: 6.5.9.
+  No code copied.
+- IAPWS-IF97, revised release R7-97(2012); IAPWS 2008 viscosity; IAPWS 2011 thermal conductivity.
+- MODFLOW 6 6.7.0 and FloPy 3.11.0: used to run the comparisons (not distributed here).
+- PyVista 0.49.2: used to draw the 3D animations.
+
 Dependencies keep their own licences; see Cargo.lock and pyproject.toml.

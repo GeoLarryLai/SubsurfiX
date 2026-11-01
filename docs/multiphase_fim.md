@@ -30,7 +30,13 @@ Code: `crates/sx-core/src/flow/implicit.rs` (solver, OBL table, wells),
   the cell pressure and the injection composition.
 * Time stepping: Newton with update chopping (max Δz) and damping; Δt grows by
   1.5 after convergence and is halved on failure.
-* Sparse direct LU (faer).
+* Linear solver (`linear_solver`): by default GMRES(40) (Saad & Schultz 1986), right-preconditioned with a
+  two-stage CPR preconditioner (Wallis 1983): rows are first scaled by the inverse of each cell's diagonal block,
+  then stage 1 solves the cell-pressure system with an unsmoothed aggregation AMG V-cycle (Notay 2010) and
+  stage 2 applies ILU(0) to all unknowns. Relative residual tolerance 1e-8, at most 300 iterations. If GMRES fails,
+  that Newton step falls back to the sparse direct LU (faer, COLAMD ordering) with a warning, counted in
+  `n_linear_fallbacks`. `linear_solver="direct"` uses the LU for every step. Both give the same results to
+  round-off (examples 12 and 13 show the comparison).
 
 ## Physics in this release
 
@@ -88,7 +94,8 @@ follows the OBL thermal form of Khait & Voskov (2018).
 * Black-oil depletion below the bubble point liberates gas (max Sg ≈ 0.23);
   per-component mass change equals well production to 1e-7 of total mass.
 
-No comparison against open-DARTS or OGS output has been run yet.
+No comparison against open-DARTS output has been run. Versions for reference: the OBL method follows
+the publications listed below (open-DARTS latest release when accessed on 2026-11-01: 2.1.0). No open-DARTS code was copied.
 
 ## Compared with open-DARTS
 
@@ -105,15 +112,8 @@ Different (this prototype):
 * Corey per phase for three-phase kr instead of Stone/Baker.
 * No well crossflow, no multisegment wells, wellbore density frozen per step.
 * No geomechanics, no diffusion/dispersion; black oil and water–oil are isothermal.
-* Single-threaded assembly and direct LU (no CPR/AMG); slower on large grids.
-
-## Compared with OGS `TwoPhaseFlowWithPP`
-
-OGS solves the two-phase pressure–pressure (pc–pg) formulation with Galerkin
-FEM and nodal unknowns; this solver uses cell-centred FV with overall-
-composition unknowns, so results should agree in the converged limit but not
-cell by cell. OGS has no OBL table and no Peaceman wells in that process.
-
+* Single-threaded assembly; the AMG is a simple aggregation scheme, not tuned for very large or strongly
+  heterogeneous grids (the direct LU fallback covers GMRES failures).
 
 ## References
 
@@ -130,4 +130,9 @@ cell by cell. OGS has no OBL table and no Peaceman wells in that process.
   modeling of geothermal processes. *Geothermics* 74, 7–18.
 * Spycher, N., Pruess, K. (2005). CO2–H2O mixtures in the geological
   sequestration of CO2. II. *Geochim. Cosmochim. Acta* 69(13), 3309–3320.
+* Saad, Y., Schultz, M. H. (1986). GMRES: a generalized minimal residual algorithm for solving nonsymmetric
+  linear systems. *SIAM J. Sci. Stat. Comput.* 7(3), 856–869.
+* Wallis, J. R. (1983). Incomplete Gaussian elimination as a preconditioning for generalized conjugate gradient
+  acceleration. SPE 12265, *SPE Reservoir Simulation Symposium*.
+* Notay, Y. (2010). An aggregation-based algebraic multigrid method. *Electron. Trans. Numer. Anal.* 37, 123–146.
 * Aziz, K., Settari, A. (1979). *Petroleum Reservoir Simulation*. (black-oil model)

@@ -356,6 +356,7 @@ def run_fim_water_oil(
     dt_min: float = ...,
     max_newton: int = 20,
     tol: float = 1e-6,
+    linear_solver: str = "iterative",
 ) -> dict[str, Any]: ...
 def run_fim_black_oil(
     model: FlowModel,
@@ -385,6 +386,7 @@ def run_fim_black_oil(
     dt_min: float = ...,
     max_newton: int = 20,
     tol: float = 1e-6,
+    linear_solver: str = "iterative",
 ) -> dict[str, Any]: ...
 def fim_water_mass_fraction(p: float, sw: float, physics: dict[str, Any] | None = None) -> float: ...
 def run_fim_co2_brine(
@@ -415,6 +417,7 @@ def run_fim_co2_brine(
     dt_min: float = ...,
     max_newton: int = 20,
     tol: float = 1e-6,
+    linear_solver: str = "iterative",
 ) -> dict[str, Any]: ...
 def run_fim_thermal_water(
     model: FlowModel,
@@ -435,6 +438,7 @@ def run_fim_thermal_water(
     dt_min: float = ...,
     max_newton: int = 20,
     tol: float = 1e-6,
+    linear_solver: str = "iterative",
 ) -> dict[str, Any]: ...
 
 class VeGrid:

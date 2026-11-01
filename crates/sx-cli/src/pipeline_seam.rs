@@ -34,7 +34,7 @@ pub struct RunRequest {
 ///
 /// `ran` is stages that ran. `skipped` is stages
 /// that were skipped or only checked.
-#[allow(dead_code)] // Not yet returned by [`run_pipeline`].
+#[allow(dead_code)] // Not returned by [`run_pipeline`].
 pub struct RunSummary {
     /// Stages that ran.
     pub ran: Vec<Stage>,

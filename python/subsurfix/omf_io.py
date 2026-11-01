@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Larry Syu-Heng Lai
 """OMF (Open Mining Format) import and export, for moving data to and from Leapfrog.
 
-**Experimental.** The API may change in a later release.
+**Experimental.** The API may change.
 
 Uses the ``omf`` 1.x package (OMF v1 file format), which is what Leapfrog's OMF
 import and export read and write.
