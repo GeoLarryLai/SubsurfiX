@@ -1,8 +1,11 @@
 <p align="center"><img src="image/logo.png" alt="SubsurfiX" width="220"></p>
+<p align="center">
+<a href="https://doi.org/10.5281/zenodo.23832007"><img src="https://img.shields.io/badge/DOI-10.5281%2Fzenodo.23832007-blue" alt="DOI"></a> <a href="https://github.com/GeoLarryLai/SubsurfiX/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0--or--later-lightgrey" alt="License"></a>
+<br>
+<a href="https://pypi.org/project/subsurfix/"><img src="https://img.shields.io/pypi/pyversions/subsurfix?color=orange" alt="Python versions"></a> <a href="https://pypi.org/project/subsurfix/"><img src="https://img.shields.io/pypi/v/subsurfix?color=orange" alt="PyPI version"></a> <a href="https://pepy.tech/projects/subsurfix"><img src="https://img.shields.io/pepy/dt/subsurfix?label=pypi%20downloads&color=orange" alt="PyPI downloads"></a>
+</p>
 
 # SubsurfiX
-
-[![PyPI version](https://img.shields.io/pypi/v/subsurfix.svg)](https://pypi.org/project/subsurfix/) [![pepy downloads](https://static.pepy.tech/badge/subsurfix)](https://pepy.tech/project/subsurfix) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23832007.svg)](https://doi.org/10.5281/zenodo.23832007) [![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue.svg)](./LICENSE)
 
 > [!WARNING]
 > **SubsurfiX** is under active development, and many functions are still experimental and not fully validated. Please use with caution.
