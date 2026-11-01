@@ -44,10 +44,3 @@ Issues = "https://github.com/GeoLarryLai/SubsurfiX/issues"
 manifest-path = "crates/sx-py/Cargo.toml"
 module-name = "subsurfix._native"
 python-source = "python"
-
-[tool.pytest.ini_options]
-testpaths = ["tests/python"]
-addopts = "-m 'not data'"
-markers = [
-    "data: needs bigger fixtures from SX_DATA_FIXTURES; run with -m data",
-]

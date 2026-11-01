@@ -27,9 +27,6 @@ def init_logging(level: str = "info") -> bool: ...
 def register_model(log: str, model: object) -> None: ...
 def clear_models(log: str | None = None) -> None: ...
 def registered_models() -> dict[str, str]: ...
-def _make_synthetic_project(
-    dir: str | os.PathLike[str], n_wells: int = 10, seed: int = 0,
-) -> str: ...
 def _plugin_roundtrip(
     log: str, model: object, x_fit: npt.NDArray[np.float32], names: list[str],
     y: npt.NDArray[np.float32], x_pred: npt.NDArray[np.float32],
@@ -254,6 +251,16 @@ class FlowModel:
         boundary_mobility: float | None = None,
         n_threads: int | None = None,
     ) -> dict[str, Any]: ...
+    def flow_diagnostics(
+        self,
+        mobility: npt.NDArray[np.float64],
+        wells: list[dict[str, Any]],
+        fixed: list[FixedPressure | dict[str, Any]] | None = None,
+        inj_mobility: float | None = None,
+        boundary_mobility: float | None = None,
+        max_tof: float | None = None,
+        n_threads: int | None = None,
+    ) -> dict[str, Any]: ...
     def run_tracer(
         self,
         mobility: npt.NDArray[np.float64],
@@ -308,6 +315,15 @@ def capillary_pressure(
     sw: float, corey: dict[str, float] | None = None, physics: dict[str, Any] | None = None
 ) -> float: ...
 def set_flow_threads(n: int) -> None: ...
+def f_phi(
+    pore_volume: npt.NDArray[np.float64],
+    tof_forward: npt.NDArray[np.float64],
+    tof_backward: npt.NDArray[np.float64],
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]: ...
+def lorenz_coefficient(f: npt.NDArray[np.float64], phi: npt.NDArray[np.float64]) -> float: ...
+def sweep_efficiency(
+    f: npt.NDArray[np.float64], phi: npt.NDArray[np.float64]
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]: ...
 def flow_threads() -> int: ...
 def water_properties(
     p_pa: npt.NDArray[np.float64], t_k: npt.NDArray[np.float64]
@@ -420,3 +436,49 @@ def run_fim_thermal_water(
     max_newton: int = 20,
     tol: float = 1e-6,
 ) -> dict[str, Any]: ...
+
+class VeGrid:
+    """Top-surface (2D) grid for CO2 vertical-equilibrium runs (experimental)."""
+    @staticmethod
+    def from_cartesian(
+        xs: list[float], ys: list[float], top: list[float], thickness: list[float], poro: list[float], perm: list[float]
+    ) -> VeGrid: ...
+    @staticmethod
+    def from_corner_point(
+        grid: CornerPointGrid, perm: npt.NDArray[np.float64], poro: npt.NDArray[np.float64]
+    ) -> VeGrid: ...
+    @property
+    def n_cells(self) -> int: ...
+    @property
+    def top(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def thickness(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def poro(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def area(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def column(self) -> npt.NDArray[np.int64]: ...
+    def centers(self) -> npt.NDArray[np.float64]: ...
+    def trap_analysis(self, tol: float = 1e-3) -> dict[str, Any]: ...
+
+def run_co2_ve(
+    grid: VeGrid,
+    wells: list[dict[str, Any]],
+    times: list[float],
+    s_wr: float = 0.1,
+    s_gr: float = 0.2,
+    p_fluid: float = 1e7,
+    t_fluid: float = 313.15,
+    m_nacl: float = 0.0,
+    fluid: dict[str, float] | None = None,
+    gravity: float = 9.80665,
+    open_boundary: bool = True,
+    p_ref: float | None = None,
+    z_ref: float | None = None,
+    cfl: float = 0.5,
+    dt_max: float = 365.25 * 86400.0,
+    trap_tol: float = 1e-3,
+) -> dict[str, Any]: ...
+def ve_fluid_properties(p: float, t: float, m_nacl: float = 0.0) -> dict[str, float]: ...
+def nordbotten_celia_h(r: float, volume: float, thickness: float, phi_eff: float, mobility_ratio: float) -> float: ...

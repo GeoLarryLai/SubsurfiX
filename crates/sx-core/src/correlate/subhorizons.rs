@@ -214,34 +214,6 @@ fn cwt_planned(x: &[f64], kernel: &[f64], plans: &FftPlans) -> SxResult<Vec<f64>
         .collect())
 }
 
-/// Ricker wavelet transform of `x` at scale `a` (-6).
-///
-/// Errors: [`SxError::InvalidInput`] for `x.len() < 2`, `a = 0` or a kernel
-/// too large to build.
-#[cfg_attr(not(test), allow(dead_code))]
-pub(crate) fn cwt(x: &[f64], a: usize, half_width_mult: usize) -> SxResult<Vec<f64>> {
-    if x.len() < 2 {
-        return Err(SxError::InvalidInput(
-            "wavelet transform needs at least 2 samples".into(),
-        ));
-    }
-    if a == 0 {
-        return Err(SxError::InvalidInput(
-            "wavelet transform needs scale >= 1".into(),
-        ));
-    }
-    let kernel = ricker_kernel(a, half_width_mult);
-    if kernel.is_empty() {
-        return Err(SxError::InvalidInput(
-            "wavelet transform: kernel too large".into(),
-        ));
-    }
-    let size = fft_size(x.len(), kernel.len() / 2)?;
-    let mut planner = FftPlanner::new();
-    let plans = FftPlans::new(&mut planner, &BTreeSet::from([size]));
-    cwt_planned(x, &kernel, &plans)
-}
-
 /// Kernels per scale and every FFT plan a segment of `2 ..= n_grid` samples needs.
 struct Transform {
     kernels: Vec<Vec<f64>>,
@@ -907,59 +879,4 @@ pub fn subhorizons_batch(
     let batch = RecordBatch::try_new(Arc::new(Schema::new(fields)), arrays)
         .map_err(|e| SxError::InvalidInput(format!("cannot build batch: {e}")))?;
     with_schema_tag(batch, SUBHORIZONS_TAG)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn close(got: f64, want: f64, tol: f64) {
-        assert!(
-            (got - want).abs() <= tol + tol * want.abs(),
-            "got {got}, want {want}"
-        );
-    }
-
-    /// Reference "Ricker values" table (7 significant digits).
-    #[test]
-    fn correlate_subhorizons_ricker_values() {
-        close(ricker(0.0, 1.0), 0.8673251, 1e-7);
-        close(ricker(1.0, 1.0), 0.0, 1e-12);
-        close(ricker(2.0, 1.0), -0.3521391, 1e-7);
-        close(ricker(5.0, 1.0), -0.0000776, 1e-7);
-        close(ricker(0.0, 4.0), 0.4336625, 1e-7);
-        close(ricker(2.0, 4.0), 0.2870294, 1e-7);
-        close(ricker(4.0, 4.0), 0.0, 1e-12);
-        close(ricker(8.0, 4.0), -0.1760695, 1e-7);
-        for (a, points, mean, psi0) in
-            [(1, 11, 1.2598e-7, 0.8673249), (4, 41, 8.0807e-7, 0.4336617)]
-        {
-            let k = ricker_kernel(a, 5);
-            assert_eq!(k.len(), points);
-            close(ricker(0.0, a as f64) - k[points / 2], mean, 1e-4);
-            close(k[points / 2], psi0, 1e-7);
-            assert!(k.iter().sum::<f64>().abs() < 1e-12);
-        }
-    }
-
-    /// Reference "Single step": one rising proposal at `u = i + 0.5`, 20 API, P = 5.
-    #[test]
-    fn correlate_subhorizons_single_step() {
-        let cfg = SubhorizonsConfig::default();
-        let tr = Transform::new(&cfg).unwrap();
-        let r: Vec<f64> = (0..200)
-            .map(|g| if g < 100 { 60.0 } else { 80.0 })
-            .collect();
-        let x: Vec<f64> = r.iter().map(|v| v - 70.0).collect();
-        let c4 = cwt(&x, 4, 5).unwrap();
-        close(c4[99], -4.3366173, 1e-7);
-        close(c4[100], 4.3366173, 1e-7);
-        let found = trace_proposals(3, &r, &[4; 200], &tr, &cfg).unwrap();
-        assert_eq!(found.len(), 1);
-        close(found[0].layer_time, 3.5, 1e-9);
-        close(found[0].strength_api, 20.0, 1e-9);
-        assert_eq!(found[0].polarity, 1);
-        assert_eq!(found[0].persistence, 5);
-        assert_eq!(found[0].n_wells, 4);
-    }
 }

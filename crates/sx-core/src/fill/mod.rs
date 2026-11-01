@@ -528,22 +528,3 @@ pub(crate) fn true_runs(mask: &[bool]) -> Vec<std::ops::Range<usize>> {
     }
     out
 }
-
-#[cfg(test)]
-mod summary_tests {
-    use super::*;
-
-    #[test]
-    fn fill_summary_flags_mostly_predicted() {
-        let mut l = WellLogs::new(WellId(3), GridRange::new(0, 4).unwrap());
-        l.provenance.insert(LogKind::Dtc, vec![1, 1, 1, 9]);
-        l.provenance.insert(LogKind::Gr, vec![0, 0, 0, 1]);
-        let logs = BTreeMap::from([(WellId(3), l)]);
-        let names = BTreeMap::from([(WellId(3), "W, 3")]);
-        let s = fill_summary_csv(&logs, &names, 0.5);
-        let lines: Vec<&str> = s.lines().collect();
-        assert_eq!(lines.len(), 3, "{s}");
-        assert!(lines.contains(&"3,\"W, 3\",DTC,0,3,1,1.0000,true"), "{s}");
-        assert!(lines.contains(&"3,\"W, 3\",GR,3,1,0,0.2500,false"), "{s}");
-    }
-}

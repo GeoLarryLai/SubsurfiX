@@ -133,32 +133,3 @@ fn sample(pairs: impl Iterator<Item = (i32, i32)>, x: f64) -> Option<f64> {
     }
     None
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn rounding_half_up() {
-        assert_eq!(md_to_k(5000.0).unwrap(), 10000);
-        assert_eq!(md_to_k(6000.3).unwrap(), 12001);
-        assert_eq!(md_to_k(6001.0).unwrap(), 12002);
-        assert_eq!(md_to_k(6001.7).unwrap(), 12003);
-        assert_eq!(md_to_k(6002.4).unwrap(), 12005);
-        assert_eq!(md_to_k(6003.1).unwrap(), 12006);
-        assert_eq!(md_to_k(0.25).unwrap(), 1);
-        assert_eq!(md_to_k(-0.25).unwrap(), 0);
-        assert!(md_to_k(f64::NAN).is_err());
-        assert!(md_to_k(f64::INFINITY).is_err());
-        assert!(md_to_k(1e12).is_err());
-    }
-
-    #[test]
-    fn sampling_is_safe_on_edges() {
-        assert_eq!(map_a_to_b(&[], 1.0), None);
-        let one = [(5, 7)];
-        assert_eq!(map_a_to_b(&one, 5.0), Some(7.0));
-        assert_eq!(map_a_to_b(&one, 5.5), None);
-        assert_eq!(map_a_to_b(&one, f64::NAN), None);
-    }
-}

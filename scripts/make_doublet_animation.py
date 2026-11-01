@@ -1,10 +1,13 @@
-"""Render the README 3D animation of a geothermal doublet on a small layered block model.
+"""Render the README 3D animation of a geothermal doublet on the Kansas (KGS) property window.
 
-The block (``examples/block_model.py``, no external data) is 10 x 10 x 12 cells of 500 m x 500 m x 5 m in four
-units of three layers, each with one porosity and permeability (kv/kh = 0.1). Cold water (30 degC) is injected
-into an 80 degC reservoir for 30 years (thermal settings of example 06).
+By default the model is the 10 x 10 x 12 window (cells of 500 m x 500 m x 5 m) of the Kansas Geological Survey
+property model read from ``examples/data/kansas_window`` by ``examples/kansas_window.py`` (the window of the
+"Real-world case" sections of examples 10 and 12). ``--block`` uses the layered block model of
+``examples/block_model.py`` instead. Cold water (30 degC) is injected into an 80 degC reservoir for 30 years
+(thermal settings of example 06).
 
     python scripts/make_doublet_animation.py
+    python scripts/make_doublet_animation.py --block --out block.gif
     python scripts/make_doublet_animation.py --npz frames.npz   # frames from another solver (e.g. MODFLOW 6)
 """
 
@@ -26,20 +29,21 @@ from subsurfix.viz3d import (
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "examples"))
 from block_model import layered_block
+from kansas_window import kansas_window
 
 INJ, PROD = (5, 5), (2, 2)
 YEARS = np.arange(1.0, 30.01, 1.0)
 
 
-def load_block():
-    bm = layered_block()
+def load_block(block: bool = False):
+    bm = layered_block() if block else kansas_window(i0=7, j0=7, nx=10, ny=10)
     return RegularGrid(bm["origin"], bm["cell"], bm["dims"]), bm["phi"], bm["k_md"]
 
 
-def run_subsurfix():
+def run_subsurfix(block: bool = False):
     from subsurfix import _native as nat
 
-    grid, phi, k_md = load_block()
+    grid, phi, k_md = load_block(block)
     NX, NY = grid.shape[0], grid.shape[1]
     nz = grid.shape[2]
     n = grid.n_cells
@@ -111,6 +115,7 @@ def main():
     ap.add_argument(
         "--npz", help="frames file written by subsurfix.viz3d.save_frames_npz"
     )
+    ap.add_argument("--block", action="store_true", help="layered block model instead of the Kansas window")
     ap.add_argument("--out", default=str(ROOT / "image" / "doublet_3d.gif"))
     ap.add_argument("--still", default=None)
     ap.add_argument("--save-npz", default=None)
@@ -118,7 +123,7 @@ def main():
     if a.npz:
         grid, frames, times = load_frames_npz(a.npz)[:3]
     else:
-        grid, frames, times = run_subsurfix()
+        grid, frames, times = run_subsurfix(a.block)
     if a.save_npz:
         save_frames_npz(a.save_npz, grid, frames, times)
     (x0, y0, _), (dx, dy, dz), nz = grid.origin, grid.spacing, grid.shape[2]
@@ -136,7 +141,7 @@ def main():
         units="°C",
         clim=(30, 80),
         z_exaggeration=25.0,
-        title="Doublet on a layered block model",
+        title="Doublet on a layered block model" if a.block else "Doublet on the Kansas KGS property window",
         time_label="{:.0f} years",
         still=a.still,
         fps=6,

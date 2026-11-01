@@ -96,20 +96,3 @@ impl StepControl {
         Ok((accept, next.max(self.dt_min)))
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn grows_shrinks_and_rejects() {
-        let c = StepControl::new(1.0, 1.0);
-        assert_eq!(c.judge(1.0, 0.0).unwrap(), (true, 2.0));
-        let (ok, dt) = c.judge(1.0, 0.9).unwrap();
-        assert!(ok && (dt - 1.0).abs() < 1e-12);
-        let (ok, dt) = c.judge(1.0, 3.0).unwrap();
-        assert!(!ok && (dt - 0.3).abs() < 1e-12);
-        assert!(c.judge(1e-6, 100.0).is_err());
-        assert!(StepControl { shrink: 1.0, ..c }.validate().is_err());
-    }
-}

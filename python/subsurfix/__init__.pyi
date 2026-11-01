@@ -12,6 +12,13 @@ from subsurfix import errors as errors
 from subsurfix.errors import SubsurfixError as SubsurfixError
 from subsurfix._native import FixedPressure as FixedPressure
 from subsurfix._native import FlowModel as FlowModel
+from subsurfix import diagnostics as diagnostics
+from subsurfix._native import CornerPointGrid as CornerPointGrid
+from subsurfix._native import VeGrid as VeGrid
+from subsurfix._native import run_co2_ve as run_co2_ve
+from subsurfix.cornerpoint import read_cornerpoint_grdecl as read_cornerpoint_grdecl
+from subsurfix.cornerpoint import flow_model_from_grdecl as flow_model_from_grdecl
+from subsurfix.cornerpoint import transmissibilities as transmissibilities
 
 _Root = str | os.PathLike[str]
 

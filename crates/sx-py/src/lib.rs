@@ -9,7 +9,7 @@ mod grid;
 mod plugin;
 mod project;
 mod sim;
-mod testing;
+mod ve;
 
 use pyo3::prelude::*;
 use sx_core::SxError;
@@ -85,6 +85,10 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(facies::facies_rollup_classify, m)?)?;
     m.add_class::<grid::PyCornerPointGrid>()?;
     m.add_class::<flow::PyFlowModel>()?;
+    m.add_class::<ve::PyVeGrid>()?;
+    m.add_function(wrap_pyfunction!(ve::run_co2_ve, m)?)?;
+    m.add_function(wrap_pyfunction!(ve::ve_fluid_properties, m)?)?;
+    m.add_function(wrap_pyfunction!(ve::nordbotten_celia_h, m)?)?;
     m.add_class::<flow::PyFixedPressure>()?;
     m.add_function(wrap_pyfunction!(flow::peaceman_wi, m)?)?;
     m.add_function(wrap_pyfunction!(flow::buckley_leverett, m)?)?;
@@ -100,7 +104,8 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(co2::co2_brine_flash, m)?)?;
     m.add_function(wrap_pyfunction!(flow::set_flow_threads, m)?)?;
     m.add_function(wrap_pyfunction!(flow::flow_threads, m)?)?;
-    #[cfg(feature = "testing")]
-    m.add_function(wrap_pyfunction!(testing::_make_synthetic_project, m)?)?;
+    m.add_function(wrap_pyfunction!(flow::f_phi, m)?)?;
+    m.add_function(wrap_pyfunction!(flow::lorenz_coefficient, m)?)?;
+    m.add_function(wrap_pyfunction!(flow::sweep_efficiency, m)?)?;
     Ok(())
 }

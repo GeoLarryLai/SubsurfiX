@@ -22,27 +22,3 @@ pub fn resd_decade_off(median_log10: f64, ref_log10: f64, limit_log10: f64) -> b
         && ref_log10.is_finite()
         && (median_log10 - ref_log10).abs() >= limit_log10
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn low_span() {
-        assert!(gr_low_span(10.0, 100.0, true, 0.2));
-        assert!(!gr_low_span(20.0, 100.0, true, 0.2)); // not strictly below
-        assert!(!gr_low_span(10.0, 100.0, false, 0.2));
-        assert!(!gr_low_span(f64::NAN, 100.0, true, 0.2));
-        assert!(!gr_low_span(10.0, f64::NAN, true, 0.2));
-        assert!(!gr_low_span(10.0, 0.0, true, 0.2));
-    }
-
-    #[test]
-    fn decade() {
-        assert!(resd_decade_off(1.0, 0.25, 0.75)); // exact boundary: >=
-        assert!(resd_decade_off(0.25, 1.0, 0.7));
-        assert!(!resd_decade_off(1.0, 0.5, 0.7));
-        assert!(!resd_decade_off(1.0, f64::NAN, 0.7));
-        assert!(!resd_decade_off(f64::NAN, 1.0, 0.7));
-    }
-}

@@ -501,6 +501,75 @@ impl PyFlowModel {
         Ok(d)
     }
 
+    /// Flow diagnostics (derived from MRST): pressure solve with `mobility`
+    /// (same arguments as `solve_pressure`), then forward / backward time of
+    /// flight (s), injector / producer tracers and partitions, and well-pair
+    /// pore volumes and allocation. `max_tof` (s) caps TOF in stagnant
+    /// regions (default `50 Σ PV / Σ inflow`). For a multiphase state pass
+    /// the total mobility of that state (frozen-mobility total flux).
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (mobility, wells, fixed=None, inj_mobility=None, boundary_mobility=None, max_tof=None, n_threads=None))]
+    fn flow_diagnostics<'py>(
+        &self,
+        py: Python<'py>,
+        mobility: PyReadonlyArray1<'_, f64>,
+        wells: &Bound<'py, PyList>,
+        fixed: Option<&Bound<'_, PyList>>,
+        inj_mobility: Option<f64>,
+        boundary_mobility: Option<f64>,
+        max_tof: Option<f64>,
+        n_threads: Option<usize>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let mob = mobility.as_slice()?;
+        let inj = inj_mobility.unwrap_or_else(|| mob.first().copied().unwrap_or(1.0));
+        let ws = wells_of(wells)?;
+        let o = flow::PressureOptions { boundary_inflow_mobility: boundary_mobility, ..Default::default() };
+        let fx = fixed_of(fixed)?;
+        let m = &self.m;
+        let (sol, dg) = flow::with_threads(n_threads, || {
+            let sol = flow::solve_pressure_with(m, mob, inj, &ws, &fx, &o)?;
+            let dg = flow::flow_diagnostics(m, &sol, &ws, &fx, &flow::DiagnosticsOptions { max_tof })?;
+            Ok((sol, dg))
+        })
+        .map_err(to_py_err)?;
+        let d = PyDict::new(py);
+        d.set_item("tof_forward", PyArray1::from_slice(py, &dg.tof_forward))?;
+        d.set_item("tof_backward", PyArray1::from_slice(py, &dg.tof_backward))?;
+        d.set_item("max_tof", dg.max_tof)?;
+        let names = |ix: &[usize]| ix.iter().map(|&i| ws[i].name.clone()).collect::<Vec<_>>();
+        d.set_item("injectors", names(&dg.injectors))?;
+        d.set_item("producers", names(&dg.producers))?;
+        d.set_item("injector_tracer", rows2(py, &dg.injector_tracer)?)?;
+        d.set_item("producer_tracer", rows2(py, &dg.producer_tracer)?)?;
+        d.set_item("injector_partition", PyArray1::from_slice(py, &dg.injector_partition))?;
+        d.set_item("producer_partition", PyArray1::from_slice(py, &dg.producer_partition))?;
+        let pl = PyList::empty(py);
+        for p in &dg.well_pairs {
+            let x = PyDict::new(py);
+            x.set_item("injector", &ws[p.injector].name)?;
+            x.set_item("producer", &ws[p.producer].name)?;
+            x.set_item("pore_volume", p.pore_volume)?;
+            x.set_item("injector_allocation", p.injector_allocation)?;
+            x.set_item("producer_allocation", p.producer_allocation)?;
+            pl.append(x)?;
+        }
+        d.set_item("well_pairs", pl)?;
+        d.set_item("p", PyArray1::from_slice(py, &sol.p))?;
+        d.set_item("flux", PyArray1::from_slice(py, &sol.flux))?;
+        let wl = PyList::empty(py);
+        for (w, r) in ws.iter().zip(&sol.wells) {
+            let x = PyDict::new(py);
+            x.set_item("name", &w.name)?;
+            x.set_item("bhp", r.bhp)?;
+            x.set_item("rate", r.rate)?;
+            x.set_item("cells", w.cells.clone())?;
+            x.set_item("cell_rates", r.cell_rates.clone())?;
+            wl.append(x)?;
+        }
+        d.set_item("wells", wl)?;
+        Ok(d)
+    }
+
     /// Half-cell geometric factor (m) to the boundary face on `axis`;
     /// times a conductivity gives a boundary conductance (W/K).
     fn boundary_geom(&self, cell: usize, axis: usize) -> PyResult<f64> {
@@ -934,4 +1003,37 @@ pub fn set_flow_threads(n: usize) {
 #[pyfunction]
 pub fn flow_threads() -> usize {
     flow::num_threads()
+}
+
+/// F–Φ curve (flow vs storage capacity) from pore volumes and forward /
+/// backward TOF; returns `(F, Phi)` from (0, 0) to (1, 1).
+#[pyfunction]
+pub fn f_phi<'py>(
+    py: Python<'py>,
+    pore_volume: PyReadonlyArray1<'_, f64>,
+    tof_forward: PyReadonlyArray1<'_, f64>,
+    tof_backward: PyReadonlyArray1<'_, f64>,
+) -> PyResult<ArrayPair<'py>> {
+    let (f, phi) = flow::f_phi(pore_volume.as_slice()?, tof_forward.as_slice()?, tof_backward.as_slice()?).map_err(to_py_err)?;
+    Ok((PyArray1::from_vec(py, f), PyArray1::from_vec(py, phi)))
+}
+
+/// Two 1D float arrays returned to Python.
+type ArrayPair<'py> = (Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>);
+
+/// Lorenz coefficient of an F–Φ curve (0 homogeneous, towards 1 heterogeneous).
+#[pyfunction]
+pub fn lorenz_coefficient(f: PyReadonlyArray1<'_, f64>, phi: PyReadonlyArray1<'_, f64>) -> PyResult<f64> {
+    Ok(flow::lorenz_coefficient(f.as_slice()?, phi.as_slice()?))
+}
+
+/// Sweep efficiency vs dimensionless time from an F–Φ curve; returns `(Ev, tD)`.
+#[pyfunction]
+pub fn sweep_efficiency<'py>(
+    py: Python<'py>,
+    f: PyReadonlyArray1<'_, f64>,
+    phi: PyReadonlyArray1<'_, f64>,
+) -> PyResult<ArrayPair<'py>> {
+    let (ev, td) = flow::sweep_efficiency(f.as_slice()?, phi.as_slice()?);
+    Ok((PyArray1::from_vec(py, ev), PyArray1::from_vec(py, td)))
 }

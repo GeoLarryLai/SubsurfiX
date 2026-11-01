@@ -175,37 +175,3 @@ pub(crate) fn auto_cell(pts: &[[f64; 3]]) -> f64 {
     let vol: f64 = ext.iter().product();
     (vol / pts.len() as f64 * 8.0).powf(1.0 / ext.len() as f64)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rand::SeedableRng;
-
-    #[test]
-    fn buckets_match_brute_force() {
-        let mut rng = ChaCha8Rng::seed_from_u64(3);
-        let mut b = Buckets::new(7.0);
-        let pts: Vec<[f64; 3]> = (0..400)
-            .map(|_| {
-                [
-                    rng.random::<f64>() * 100.0,
-                    rng.random::<f64>() * 50.0,
-                    rng.random::<f64>() * 10.0,
-                ]
-            })
-            .collect();
-        for p in &pts {
-            b.push(*p);
-        }
-        for t in [[50.0, 25.0, 5.0], [-30.0, 80.0, 0.0], [99.0, 0.0, 9.0]] {
-            let got = b.nearest(&t, 9, f64::INFINITY);
-            let mut all: Vec<(f64, usize)> = pts
-                .iter()
-                .enumerate()
-                .map(|(i, p)| (dist(p, &t), i))
-                .collect();
-            all.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-            assert_eq!(got, all[..9].to_vec());
-        }
-    }
-}

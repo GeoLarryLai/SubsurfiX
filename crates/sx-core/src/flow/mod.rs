@@ -22,6 +22,11 @@
 //! * [`implicit`]: **experimental** fully implicit multiphase engine with
 //!   operator-based linearization (OBL) ([`run_fim`]); physics in
 //!   [`fim_physics`] ([`DeadOil`], [`BlackOil`], [`Co2Brine`], [`ThermalWater`]).
+//! * [`ve`]: **experimental** CO2 vertical-equilibrium sharp-interface
+//!   model on a top-surface grid with spill-point and residual trapping
+//!   ([`ve::run_co2_ve`], [`ve::trap_analysis`]).
+//! * [`diagnostics`]: flow diagnostics (time of flight, tracer partitions,
+//!   well-pair allocation, F–Φ, Lorenz coefficient, sweep), derived from MRST.
 //! * [`benchmarks`]: SPE10/OPM Flow comparison (stub, returns an error).
 //!
 //! Units are SI throughout: m, m², m³, Pa, Pa·s, s, m³/s (reservoir volume).
@@ -35,6 +40,7 @@
 pub mod analytic;
 pub mod benchmarks;
 pub mod co2_brine;
+pub mod diagnostics;
 mod heat;
 pub mod fim_physics;
 pub mod implicit;
@@ -45,8 +51,10 @@ mod pressure;
 mod solver;
 mod stepping;
 pub mod water;
+pub mod ve;
 mod transport;
 
+pub use diagnostics::{f_phi, flow_diagnostics, lorenz_coefficient, sweep_efficiency, DiagnosticsOptions, FlowDiagnostics, WellPair};
 pub use fim_physics::{BlackOil, Co2Brine, Co2BrineState, DeadOil, PvtRow, RockThermal, ThermalWater};
 pub use implicit::{run_fim, FimOptions, FimResult, OblPhysics, OblTable, OpLayout};
 pub use heat::{run_heat, run_heat_with, FixedTemperature, HeatFlux, HeatInputs, HeatResult, ThermalProps};

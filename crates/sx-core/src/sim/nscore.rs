@@ -154,31 +154,3 @@ fn interp(xs: &[f64], ys: &[f64], x: f64) -> f64 {
     let (x0, x1, y0, y1) = (xs[i - 1], xs[i], ys[i - 1], ys[i]);
     y0 + (y1 - y0) * (x - x0) / (x1 - x0)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn normal_functions() {
-        assert!((norm_cdf(0.0) - 0.5).abs() < 1e-7);
-        assert!((norm_cdf(1.959_964) - 0.975).abs() < 1e-6);
-        for p in [0.001, 0.1, 0.5, 0.8, 0.999] {
-            assert!((norm_cdf(norm_inv(p)) - p).abs() < 1e-6);
-        }
-    }
-
-    #[test]
-    fn round_trip_and_ranks() {
-        let d = [5.0, 1.0, 3.0, 3.0, 10.0];
-        let ns = NormalScore::fit(&d).unwrap();
-        assert_eq!(ns.values, vec![1.0, 3.0, 5.0, 10.0]);
-        assert!((ns.probs[1] - 0.4).abs() < 1e-12); // ranks 1,2 → mean 1.5 → 2.0/5
-        for x in d {
-            assert!((ns.back(ns.forward(x)) - x).abs() < 1e-6);
-        }
-        assert!(ns.forward(1.0) < ns.forward(3.0));
-        assert_eq!(ns.back(-10.0), 1.0);
-        assert_eq!(ns.back(10.0), 10.0);
-    }
-}

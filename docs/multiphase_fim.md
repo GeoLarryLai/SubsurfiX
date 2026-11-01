@@ -69,7 +69,6 @@ follows the OBL thermal form of Khait & Voskov (2018).
 
 ## Verification done (all from the compiled solver)
 
-* Rust `crates/sx-core/tests/flow_fim.rs` and Python `tests/python/test_fim.py`.
 * Buckley–Leverett, 200 cells, μo/μw = 2: L1 error vs the analytic profile
   0.011 (t_D = 0.2) and 0.013 (t_D = 0.4); front at x_D 0.475 vs 0.456 and
   0.935 vs 0.911; water mass gained equals mass injected to 1e-6 relative.

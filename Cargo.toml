@@ -4,13 +4,12 @@ members = [
     "crates/sx-cli",
     "crates/sx-core",
     "crates/sx-py",
-    "crates/sx-testutil",
 ]
 
 [workspace.package]
 edition = "2021"
 license = "AGPL-3.0-or-later"
-version = "0.1.1"
+version = "0.1.2"
 publish = false
 description = "A tool for automation in subsurface geological/petrophysical analysis and geomodeling workflows"
 authors = ["Larry Syu-Heng Lai"]

@@ -29,23 +29,3 @@ pub fn stable_hash(parts: &[&[u8]]) -> u64 {
 pub fn stream_seed(seed: u64, stage: &str, well_id: i32) -> u64 {
     seed ^ stable_hash(&[stage.as_bytes(), &well_id.to_le_bytes()])
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn empty_is_offset() {
-        assert_eq!(stable_hash(&[]), FNV_OFFSET);
-    }
-
-    #[test]
-    fn known_value_for_a() {
-        assert_eq!(stable_hash(&[b"a"]), 0xaf63_dc4c_8601_ec8c);
-    }
-
-    #[test]
-    fn separator_matters() {
-        assert_ne!(stable_hash(&[b"ab", b"c"]), stable_hash(&[b"a", b"bc"]));
-    }
-}

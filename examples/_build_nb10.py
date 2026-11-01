@@ -76,4 +76,55 @@ are the check. Remaining differences come from the well models (SubsurfiX's BHP 
 well), solver tolerances and time-step control. GWE dispersion is off to match `run_heat`.""",
 ]
 
-nbf.write(nb(cells), HERE / "10_modflow_heat.ipynb")
+SNAP = """def summary(label):
+    bal = np.abs(np.asarray(sx["energy_change"]) - np.asarray(sx["energy_in"])) / np.abs(np.asarray(sx["energy_in"]))
+    return {"Model": label, "Cells": f"{nx} × {ny} × {nz} = {N}", "Median k (mD)": f"{np.median(kmd):.1f}",
+            "k range (mD)": f"{kmd.min():.2f}–{kmd.max():.1f}",
+            "Producer T at 30 yr, SubsurfiX (°C)": f"{tp_sx[-1]:.3f}", "Producer T at 30 yr, MODFLOW 6 (°C)": f"{tp_mf[-1]:.3f}",
+            "Max ΔT anywhere (°C)": f"{np.abs(T_sx - T_mf).max():.2e}", "SubsurfiX energy balance error": f"{bal.max():.1e}",
+            "Run time SubsurfiX / MODFLOW 6 (s)": f"{t_sx:.2f} / {t_mf:.2f}"}
+RESULTS = {"block": summary("Layered block")}
+print("block-model results kept for the comparison at the end of the notebook")"""
+
+
+def kansas(cell: str) -> str:
+    """Same code as the block section, on the whole Kansas model (separate output names)."""
+    out = (cell.replace("bm = layered_block()", "from kansas_window import kansas_model\nbm = kansas_model()")
+               .replace("INJ, PROD = (5, 5), (2, 2)", "INJ, PROD = (13, 11), (9, 11)")
+               .replace('OUT / "mf6_heat"', 'OUT / "mf6_heat_kansas"')
+               .replace('"10_modflow_heat.png"', '"10_modflow_heat_kansas.png"'))
+    return out
+
+
+KANSAS = [
+SNAP,
+"""md:# Real-world case: the whole Kansas (KGS) property model
+
+The same doublet on real geology: the whole 22 × 22 × 12 Kansas Geological Survey (KGS) property model built in
+notebooks 01–04 (5808 cells of 500 × 500 × 5 m, 11 × 11 km × 60 m); the same model and wells as the README
+animation. The two small files it reads are committed in `examples/data/kansas_window/` (see the README there).
+
+- Porosity from the notebook 04 property model, clipped to 0.03–0.30.
+- Permeability from porosity as in notebook 05: k = 10^(−1 + 14 φ) mD, doubled in clean-facies cells, kv/kh = 0.1.
+- Wells in the middle of the model, 2 km apart (a typical doublet spacing): INJ at column (13, 11), 0.1 m³/s of
+  30 °C water; PROD at (9, 11), 20 MPa. Same 80 °C start, thermal properties and 30 years. The cells below are the
+  block-model cells with only the property source and well positions swapped.""",
+"md:## Whole Kansas model",
+kansas(cells[4]),
+"md:## Run both",
+kansas(cells[6]),
+kansas(cells[7]),
+"""md:## Kansas results and block-versus-Kansas comparison
+Built from the runs in this notebook (nothing typed in by hand). The energy balance error is SubsurfiX's
+|energy change − net energy in| / |net energy in|, worst over all report years.""",
+"""RESULTS["kansas"] = summary("Kansas KGS whole model")
+keys = list(RESULTS["block"])
+rows = ["| " + " | ".join(keys) + " |", "|" + "---|" * len(keys)]
+rows += ["| " + " | ".join(str(r[k]) for k in keys) + " |" for r in RESULTS.values()]
+display(Markdown("\\n".join(rows)))""",
+"""md:What differs: in the block model the cold water follows the 80 mD main sand and the producer cools mainly
+through that unit. In the Kansas model permeability varies from cell to cell, so the cold front is irregular and
+the producer temperature reflects the connected high-permeability paths between the wells.""",
+]
+
+nbf.write(nb(cells + KANSAS), HERE / "10_modflow_heat.ipynb")

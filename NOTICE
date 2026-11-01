@@ -15,4 +15,15 @@ Data
 - Wister geothermal prospect wells 12-27 and 85-20 (Ormat), DOE Geothermal Data Repository submission 904,
   https://gdr.openei.org/submissions/904, CC BY 4.0.
 
+MRST attribution
+- crates/sx-core/src/flow/ve.rs contains code derived from the MATLAB Reservoir Simulation Toolbox (MRST),
+  https://www.sintef.no/mrst/ (module co2lab, addVERelpermSharpInterface.m).
+  Copyright 2009-2026 SINTEF Digital, Mathematics & Cybernetics.
+  MRST is licensed GPL-3.0-or-later; the derived code is distributed here under AGPL-3.0-or-later, as permitted
+  by section 13 of the GNU GPL v3. MRST is not affiliated with and does not endorse SubsurfiX.
+- crates/sx-core/src/flow/diagnostics.rs contains code derived from MRST module diagnostics
+  (computeTimeOfFlight.m, computeTOFandTracer.m, computeWellPairs.m, computeFandPhi.m, computeLorenz.m,
+  computeSweep.m). Copyright 2009-2026 SINTEF Digital, Mathematics & Cybernetics. GPL-3.0-or-later; distributed
+  here under AGPL-3.0-or-later as above.
+
 Dependencies keep their own licences; see Cargo.lock and pyproject.toml.

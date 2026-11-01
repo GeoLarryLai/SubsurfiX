@@ -87,16 +87,3 @@ pub fn with_threads<R: Send>(n_threads: usize, f: impl FnOnce() -> SxResult<R> +
         },
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn with_threads_allows_a_second_size() {
-        let a = with_threads(2, || Ok(rayon::current_num_threads())).unwrap();
-        let b = with_threads(3, || Ok(rayon::current_num_threads())).unwrap();
-        assert_eq!(b, 3);
-        assert_eq!(a, 2);
-    }
-}

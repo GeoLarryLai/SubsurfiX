@@ -245,7 +245,7 @@ for name, r in runs.items():
           f"INJ BHP {np.asarray(r['bhp'])[-1, 0] / 1e6:.2f} MPa")""",
 """md:## 3D animations
 One GIF per fluid system with the same grid, camera, colour scale and wells (vertical exaggeration 25).
-Written to `SX_EXAMPLE_OUT`; the copies in `image/` of the repository come from this cell.""",
+Written to `SX_EXAMPLE_OUT`. The README copies in `image/` come from the Kansas section at the end of this notebook.""",
 """grid = RegularGrid(origin, cell, (NX, NY, NZ))
 wl = [Well(nm, origin[0] + (ij[0] + 0.5) * cell[0], origin[1] + (ij[1] + 0.5) * cell[1], 0.0, NZ * cell[2], col)
       for nm, ij, col in (("INJ", INJ, "#1f4e9c"), ("PROD", PROD, "#b2182b"))]
@@ -289,6 +289,84 @@ display(Markdown("\\n".join(rows)))""",
 - The cold-CO2 case is shown as temperature maps only; there is no GIF for it.
 - Experimental solver: not validated as equivalent to open-DARTS or OpenGeoSys.""",
 ]
+
+SNAP = """RES = {"Layered block": {"runs": runs, "RUNTIME": RUNTIME, "bal": bal, "PV": PV.sum(), "k_md": k_md, "phi": phi}}
+print("block-model results kept for the comparison at the end of the notebook")"""
+
+
+def kansas(cell: str) -> str:
+    """Same code as the block section, on the Kansas window (separate output names)."""
+    out = (cell.replace("from block_model import column_wells, describe, layered_block",
+                        "from block_model import column_wells, describe\nfrom kansas_window import kansas_window")
+               .replace("bm = layered_block()", "bm = kansas_window(i0=7, j0=7, nx=10, ny=10)")
+               .replace('"fim12_mass_balance.png"', '"fim12_mass_balance_kansas.png"')
+               .replace('"fim12_saturation_maps.png"', '"fim12_saturation_maps_kansas.png"')
+               .replace('OUT / fn', 'OUT / ("kansas_" + fn)')
+               .replace('title=title', 'title=title + " (Kansas KGS window)"'))
+    return out
+
+
+KANSAS = [
+SNAP,
+"""md:# Real-world case: Kansas (KGS) property window
+
+The same four runs on real geology: a 10 × 10 × 12 window (columns i = 7–16, j = 7–16, all 12 layers, 1200
+cells of 500 × 500 × 5 m) of the Kansas Geological Survey (KGS) property model built in notebooks 01–04. The
+two small files it reads are committed in `examples/data/kansas_window/` (see the README there), so no download
+is needed.
+
+- Porosity from the notebook 04 property model, clipped to 0.03–0.30.
+- Permeability from porosity as in notebook 05: k = 10^(−1 + 14 φ) mD, doubled in clean-facies cells, kv/kh = 0.1.
+  Unlike the block model, porosity and permeability vary from cell to cell (printed below).
+- Same wells, fluids, initial states, injection rate (0.008 m³/s), report times and solver settings as the block
+  section. The code cells below are the block-model cells with only the property source (and output file names)
+  swapped.
+- The three GIFs written here (`kansas_fim_*.gif`) are the animations shown in the repository README.""",
+"md:## Kansas window",
+kansas(cells[4]),
+"md:## Case 1 · Dead-oil water injection (Kansas)",
+kansas(cells[7]),
+"md:## Case 2 · Gas injection into a black oil (Kansas)",
+kansas(cells[9]),
+"md:## Case 3 · CO2 injection into brine, isothermal (Kansas)",
+kansas(cells[11]),
+"md:## Case 4 · Cold CO2 injection, energy equation on (Kansas)",
+kansas(cells[13]),
+"md:## Solver statistics and mass balance (Kansas)",
+kansas(cells[15]),
+kansas(cells[16]),
+"md:## Saturation maps (Kansas)",
+kansas(cells[18]),
+"md:## 3D animations (Kansas)\nSame camera, colour scale and wells as the block GIFs.",
+kansas(cells[26]),
+"""md:## Results summary (Kansas)
+Built by the next cell from the Kansas runs above (nothing typed in by hand); same definitions as the block summary.""",
+kansas(cells[28]),
+"""md:## Block versus Kansas
+One row per case and model, built from both sections' runs. Plume cells: cells with injected-phase saturation
+above 0.05 (above the initial value for water) after 40 years.""",
+"""RES["Kansas KGS window"] = {"runs": runs, "RUNTIME": RUNTIME, "bal": bal, "PV": PV.sum(), "k_md": k_md, "phi": phi}
+rows = ["| Model | Pore volume (m³) | Median k (mD) |", "|---|---|---|"]
+for mname, R in RES.items():
+    rows.append(f"| {mname} | {R['PV']:.3e} | {np.median(R['k_md']):.1f} |")
+display(Markdown("\\n".join(rows)))
+rows = ["| Case | Model | Run time | Steps / cuts | Worst balance error | Max injected saturation | Plume cells | INJ pressure at 40 yr | CO2 breakthrough |",
+        "|---|---|---|---|---|---|---|---|---|"]
+for case in RES["Layered block"]["runs"]:
+    for mname, R in RES.items():
+        r = R["runs"][case]; ph, lab = INJECTED[case]
+        s = np.asarray(r["saturation"])[:, :, ph]
+        bt = breakthrough(r) if "CO2" in case else "–"
+        rows.append(f"| {case} | {mname} | {R['RUNTIME'][case]:.0f} s | {r['n_steps']} / {r['n_cuts']} | "
+                    f"{np.abs(R['bal'][case]).max():.1e} | {lab} {s[-1].max():.2f} | {int(((s[-1] - s[0]) > 0.05).sum())} | "
+                    f"{np.asarray(r['bhp'])[-1, 0] / 1e6:.2f} MPa | {bt} |")
+display(Markdown("\\n".join(rows)))""",
+"""md:What differs: in the block model each unit is uniform, so the injected phase spreads as a layered front
+mostly through the 80 mD main sand. In the Kansas window permeability varies from cell to cell and is highest
+near the top, so the plumes are irregular and follow the connected high-permeability cells. The same limitations
+listed above apply to both sections.""",
+]
+cells = cells + KANSAS
 
 n = nbf.v4.new_notebook()
 n.metadata["kernelspec"] = {"name": "python3", "display_name": "Python 3", "language": "python"}

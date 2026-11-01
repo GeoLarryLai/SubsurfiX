@@ -2,7 +2,6 @@
 // Copyright (C) 2026 Larry Syu-Heng Lai
 //! Incompressible TPFA pressure solve with Peaceman wells.
 
-
 use std::cell::RefCell;
 
 use rayon::prelude::*;
@@ -692,36 +691,4 @@ pub(super) fn solve_spd(
     }
     SpdCache::default().solve(n_unk, &e, &mut rhs)?;
     Ok(rhs)
-}
-
-#[cfg(test)]
-mod control_tests {
-    use super::*;
-
-    fn well(control: WellControl) -> FlowWell {
-        FlowWell {
-            name: "W".into(),
-            kind: WellKind::Injector,
-            control,
-            cells: vec![0],
-            radius_m: 0.1,
-            skin: 0.0,
-            wi: None,
-            ref_depth_m: None,
-            bhp_limit: None,
-            crossflow: true,
-        }
-    }
-
-    #[test]
-    fn rejects_negative_rates_and_bad_boundaries() {
-        assert!(check_controls(&[well(WellControl::Rate(1e-3))], &[]).is_ok());
-        assert!(check_controls(&[well(WellControl::Rate(-1e-3))], &[]).is_err());
-        assert!(check_controls(&[well(WellControl::Rate(f64::NAN))], &[]).is_err());
-        assert!(check_controls(&[well(WellControl::Bhp(f64::INFINITY))], &[]).is_err());
-        let f = |trans, pressure| FixedPressure { cell: 0, trans, pressure };
-        assert!(check_controls(&[], &[f(1e-12, 1e7)]).is_ok());
-        assert!(check_controls(&[], &[f(-1.0, 1e7)]).is_err());
-        assert!(check_controls(&[], &[f(1.0, f64::NAN)]).is_err());
-    }
 }

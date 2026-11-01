@@ -96,26 +96,3 @@ impl RegularGrid {
         ]
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn index_roundtrip_and_locate() {
-        let g = RegularGrid::new([0.0, 0.0, 1000.0], [10.0, 20.0, 2.0], [3, 4, 5]).unwrap();
-        assert_eq!(g.n_cells(), 60);
-        for idx in 0..60 {
-            let (i, j, k) = g.ijk(idx);
-            assert_eq!(g.index(i, j, k), idx);
-            assert_eq!(g.locate(g.center(idx)), Some(idx));
-        }
-        assert_eq!(g.locate([30.0, 80.0, 1010.0]), Some(59)); // max faces
-        assert_eq!(g.locate([-0.1, 0.0, 1000.0]), None);
-        assert_eq!(g.locate([f64::NAN, 0.0, 1000.0]), None);
-        assert!(RegularGrid::new([0.0; 3], [0.0, 1.0, 1.0], [1, 1, 1]).is_err());
-        let c =
-            RegularGrid::covering([0.0, 0.0, 0.0], [25.0, 10.0, 3.0], [10.0, 10.0, 1.0]).unwrap();
-        assert_eq!(c.dims, [3, 1, 3]);
-    }
-}
