@@ -138,7 +138,7 @@ them on a shared relative geologic time axis (Wheeler and Hale, 2014).
 - Formation tops act as fixed tie points that the match must honour, an idea shown by Samant et al. (2025). All the
   well-to-well pairwise matches between formation tops follow Lai et al. (2026) and Samant et al. (2025). Picks that
   disagree with nearby wells are flagged for checking instead of being moved.
-- Finer sub-horizons are suggested by looking for repeated patterns at several scales in the gamma-ray log,
+- Finer sub-horizons are suggested by looking for repeated patterns at several scales in the preprocessed log,
   following Sylvester (2023).
 - All pairwise DTW matches across this network are then solved together as one least-squares problem to find the
   correlation consensus. SubsurfiX first links each well to its nearest neighbours (k-nearest neighbours, kNN) and
