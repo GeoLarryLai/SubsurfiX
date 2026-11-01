@@ -133,6 +133,18 @@ preconditioner and algebraic multigrid (Notay, 2010), falling back to a direct s
 (`linear_solver="direct"` forces it; same answers, slower). `subsurfix.parallel.run_cases` runs several cases in
 parallel.
 
+**Well correlation.** SubsurfiX uses the dynamic time warping (DTW) algorithm to correlate wells by placing all of
+them on a shared relative geologic time axis (Wheeler and Hale, 2014).
+- Formation tops act as fixed tie points that the match must honour, an idea shown by Samant et al. (2025). All the
+  well-to-well pairwise matches between formation tops follow Lai et al. (2026) and Samant et al. (2025). Picks that
+  disagree with nearby wells are flagged for checking instead of being moved.
+- Finer sub-horizons are suggested by looking for repeated patterns at several scales in the gamma-ray log,
+  following Sylvester (2023).
+- All pairwise DTW matches across this network are then solved together as one least-squares problem to find the
+  correlation consensus. SubsurfiX first links each well to its nearest neighbours (k-nearest neighbours, kNN) and
+  to its Delaunay neighbours. A minimum spanning tree (Kruskal, 1956) keeps the whole field connected, and a robust
+  Tukey biweight (Beaton and Tukey, 1974) reweights each match, so a poor match between two wells is down-weighted.
+
 ### FIM-OBL against MODFLOW 6: cold-water injection on the Kansas model
 
 **Purpose:** check that FIM-OBL (fully implicit, operator-based linearization) reproduces MODFLOW 6, the U.S. Geological Survey standard code, for water flow and heat on a real reservoir model.
@@ -232,6 +244,12 @@ or the temperature change is. Details: `scripts/kansas_fluids.py`; a fast small 
   geologic time. *Basin Research*. <https://doi.org/10.1111/bre.12787>
 - Samant, R., et al. (2025). Enhancing the accuracy of dynamic time warping by integrating stratigraphic
   constraints. *Paleoceanography and Paleoclimatology*. <https://doi.org/10.1029/2024PA005082>
+- Lai, L. S.-H., Sylvester, Z., Covault, J. A., Gomberg, J. S., Nieminski, N. M. (Accepted 2026). Reproducible
+  event-bed correlation with uncertainty: pyCoreRelator. *Sedimentology*. <https://doi.org/10.1111/sed.70163>
+- Kruskal, J. B. (1956). On the shortest spanning subtree of a graph and the traveling salesman problem.
+  *Proceedings of the American Mathematical Society* 7(1), 48–50. <https://doi.org/10.1090/S0002-9939-1956-0078686-7>
+- Beaton, A. E., Tukey, J. W. (1974). The fitting of power series, meaning polynomials, illustrated on
+  band-spectroscopic data. *Technometrics* 16(2), 147–185. <https://doi.org/10.1080/00401706.1974.10489171>
 - Daly, C. (2021). An application of an embedded model estimator to a synthetic nonstationary reservoir model.
   *Frontiers in Artificial Intelligence* 4. <https://doi.org/10.3389/frai.2021.624697>
 - Daly, C. (2022). An embedded model estimator for non-stationary random functions using multiple secondary
