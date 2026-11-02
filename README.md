@@ -244,7 +244,7 @@ or the temperature change is. Details: `scripts/kansas_fluids.py`; a fast small 
   geologic time. *Basin Research*. <https://doi.org/10.1111/bre.12787>
 - Samant, R., et al. (2025). Enhancing the accuracy of dynamic time warping by integrating stratigraphic
   constraints. *Paleoceanography and Paleoclimatology*. <https://doi.org/10.1029/2024PA005082>
-- Lai, L. S.-H., Sylvester, Z., Covault, J. A., Gomberg, J. S., Nieminski, N. M. (Accepted 2026). Reproducible
+- Lai, L. S.-H., Sylvester, Z., Covault, J. A., Gomberg, J. S., Nieminski, N. M. (2026). Reproducible
   event-bed correlation with uncertainty: pyCoreRelator. *Sedimentology*. <https://doi.org/10.1111/sed.70163>
 - Kruskal, J. B. (1956). On the shortest spanning subtree of a graph and the traveling salesman problem.
   *Proceedings of the American Mathematical Society* 7(1), 48–50. <https://doi.org/10.1090/S0002-9939-1956-0078686-7>
