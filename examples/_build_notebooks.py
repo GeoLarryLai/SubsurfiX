@@ -113,7 +113,7 @@ names = names[(names.e < -2990) & (names.e > -3700)]                     # tops 
 tcol = dict(zip(names.index, plt.cm.tab20(np.arange(len(names)) % 20)))
 levels = np.arange(np.floor(d.layer_time.min()), np.ceil(d.layer_time.max()) + 1e-9, 0.25)
 gr_band = d.groupby(np.digitize(d.layer_time, levels)).gr_api.mean()         # mean GR of each correlated interval
-norm = plt.Normalize(30, 120); band_cmap = plt.cm.YlOrBr
+norm = plt.Normalize(30, 120); band_cmap = plt.get_cmap("managua")
 def elev_at(s, lv):                                                     # depth of a layer_time level in one well
     s = s.dropna(subset=["layer_time"]).sort_values("layer_time")
     return np.interp(lv, s.layer_time, s.elev_ft, left=np.nan, right=np.nan)
@@ -124,7 +124,7 @@ for i in range(len(per) - 1):                                            # corre
     for m in range(len(levels) - 1):
         q = [ea[m], eb[m], eb[m + 1], ea[m + 1]]
         if np.all(np.isfinite(q)) and (m + 1) in gr_band.index:
-            axs[0].fill([i + 0.45, i + 1.45, i + 1.45, i + 0.45], q, color=band_cmap(norm(gr_band[m + 1])), alpha=0.45, lw=0)
+            axs[0].fill([i + 0.45, i + 1.45, i + 1.45, i + 0.45], q, color=band_cmap(norm(gr_band[m + 1])), alpha=0.35, lw=0)
 for i, s in enumerate(per):
     g = (s.gr_api.clip(0, 150) / 150) * 0.9 + i
     axs[0].plot(g, s.elev_ft, lw=0.5, color="k"); axs[1].plot(g, s.layer_time, ".", ms=0.6, color="k")
@@ -134,7 +134,7 @@ for n, r in names.iterrows():                                            # tops 
     axs[1].axhline(r.t + 1, color=tcol[n], lw=1.2, alpha=0.8)
 for m in range(len(levels) - 1):
     if (m + 1) in gr_band.index:
-        axs[1].axhspan(levels[m], levels[m + 1], color=band_cmap(norm(gr_band[m + 1])), alpha=0.45, lw=0, zorder=0)
+        axs[1].axhspan(levels[m], levels[m + 1], color=band_cmap(norm(gr_band[m + 1])), alpha=0.35, lw=0, zorder=0)
 axs[0].set_ylabel("elevation (ft, relative to sea level)"); axs[1].set_ylabel("relative geological time (layer_time)")
 axs[0].set_ylim(-3720, -2980); axs[1].set_ylim(d.layer_time.max() + 0.2, d.layer_time.min() - 0.2)
 for ax, t in zip(axs, ["on depth: colour bands join the same layer_time between wells", "on relative geological time (Wheeler-style)"]):

@@ -84,7 +84,7 @@ triangles are the well data in that layer.
 <li><b>Sequential indicator simulation (SIS)</b>, one realization: clean or tight rock (Journel 1983; Deutsch &amp; Journel 1998, GSLIB).</li>
 <li><b>Machine learning (ML) P50</b>: the median of a quantile regression forest (Meinshausen 2006).</li>
 </ul>
-All are SubsurfiX's own implementations based on these methods; see notebook 04.</td>
+See notebook 04.</td>
 </tr>
 </table>
 
@@ -272,8 +272,7 @@ or the temperature change is. Details: `scripts/kansas_fluids.py`; a fast small 
 
 FIM-OBL is a finite-volume solver that follows the operator-based linearization published for
 [open-DARTS](https://gitlab.com/open-darts/open-darts) (Voskov 2017; Khait & Voskov 2017, 2018; latest release
-when accessed on 2026-11-01: 2.1.0). No open-DARTS code was copied, and FIM-OBL has not been checked as
-equivalent to it. The `.vtu` mesh export writes the mesh format read by
+when accessed on 2026-11-01: 2.1.0). The `.vtu` mesh export writes the mesh format read by
 [OpenGeoSys](https://www.opengeosys.org) (latest release when accessed on 2026-11-01: 6.5.9). The CO₂ VE relative permeabilities and the flow diagnostics are derived from
 [MRST](https://www.sintef.no/projectweb/mrst/) 2026a (SINTEF Digital, GPL-3.0-or-later). Water properties follow
 IAPWS-IF97 (revised release R7-97(2012)), with viscosity from IAPWS 2008 and thermal conductivity from IAPWS 2011.
