@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Larry Syu-Heng Lai
-//! **Experimental** fully implicit (FIM) multiphase, multicomponent flow with
+//! **Experimental** FVM solver: fully implicit method (FIM) for multiphase, multicomponent flow with
 //! operator-based linearization (OBL).
 //!
 //! Discretization: cell-centred finite volumes on the [`FlowModel`] grid,
-//! two-point flux approximation (TPFA), backward Euler in time, a fully
+//! two-point flux approximation, backward Euler in time, a fully
 //! coupled Newton solve, phase-potential upwinding and Peaceman wells.
 //! The nonlinear terms are written in the operator form of Voskov (2017) and
 //! Khait & Voskov (2017): for every equation `c` (component mass)
@@ -120,7 +120,7 @@ impl OpLayout {
     }
 }
 
-/// Physics plugged into the OBL engine. State `ω = [p, z_1 … z_{ne−1}]`.
+/// Physics plugged into the FVM solver with operator-based linearization. State `ω = [p, z_1 … z_{ne−1}]`.
 ///
 /// A CO₂–brine compositional physics implements this trait with components
 /// (H₂O, CO₂), phases (aqueous, CO₂-rich) and its flash in `evaluate`

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Larry Syu-Heng Lai
-//! Python bindings for the experimental fully implicit OBL engine
+//! Python bindings for the experimental fully implicit FVM solver with operator-based linearization
 //! (`sx_core::flow::implicit`): dead-oil (water–oil), black-oil, CO2–brine
 //! and thermal-water runs.
 
@@ -13,7 +13,7 @@ use sx_core::flow::{self, BlackOil, Co2Brine, DeadOil, FimOptions, FimResult, Ob
 use crate::errors::to_py_err;
 use crate::flow::{corey_of, physics_of, rows2, wells_of, PyFlowModel};
 
-fn arr3<'py>(py: Python<'py>, rows: &[Vec<f64>], b: usize, c: usize) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn arr3<'py>(py: Python<'py>, rows: &[Vec<f64>], b: usize, c: usize) -> PyResult<Bound<'py, PyAny>> {
     let flat: Vec<f64> = rows.iter().flatten().copied().collect();
     Ok(PyArray1::from_vec(py, flat).reshape([rows.len(), b, c])?.into_any())
 }
@@ -245,7 +245,7 @@ pub fn fim_water_mass_fraction(p: f64, sw: f64, physics: Option<&Bound<'_, PyDic
     Ok(ph.z_from_sw(p, sw))
 }
 
-fn rock_of(rock: Option<&Bound<'_, PyDict>>) -> PyResult<RockThermal> {
+pub(crate) fn rock_of(rock: Option<&Bound<'_, PyDict>>) -> PyResult<RockThermal> {
     let mut r = RockThermal::default();
     if let Some(d) = rock {
         for (k, v) in d.iter() {
@@ -262,7 +262,7 @@ fn rock_of(rock: Option<&Bound<'_, PyDict>>) -> PyResult<RockThermal> {
     Ok(r)
 }
 
-fn thermal_injection(ws: &[flow::FlowWell], inj_t: Option<Vec<f64>>, t0: &[f64]) -> PyResult<Vec<f64>> {
+pub(crate) fn thermal_injection(ws: &[flow::FlowWell], inj_t: Option<Vec<f64>>, t0: &[f64]) -> PyResult<Vec<f64>> {
     match inj_t {
         Some(v) if v.len() == ws.len() => Ok(v),
         Some(_) => Err(PyValueError::new_err("injection_temperature needs one value (K) per well")),

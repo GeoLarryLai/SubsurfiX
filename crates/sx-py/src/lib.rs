@@ -3,6 +3,7 @@
 mod co2;
 mod errors;
 mod facies;
+mod fem;
 mod fim;
 mod flow;
 mod grid;
@@ -97,6 +98,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fim::fim_water_mass_fraction, m)?)?;
     m.add_function(wrap_pyfunction!(fim::run_fim_co2_brine, m)?)?;
     m.add_function(wrap_pyfunction!(fim::run_fim_thermal_water, m)?)?;
+    m.add_function(wrap_pyfunction!(fem::run_fem_thermal_water, m)?)?;
     m.add_function(wrap_pyfunction!(flow::capillary_pressure, m)?)?;
     m.add_function(wrap_pyfunction!(flow::theis_drawdown, m)?)?;
     m.add_function(wrap_pyfunction!(flow::water_properties, m)?)?;

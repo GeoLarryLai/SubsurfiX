@@ -9,6 +9,8 @@ HERE = Path(__file__).resolve().parent
 cells = [
 """md:# 14 · Flow diagnostics: time of flight, tracer partitions, F–Φ, Lorenz and sweep
 
+> Terminology note: the finite-volume method (FVM) is the method label. Saved outputs were relabelled from the original results; no simulation was rerun.
+
 Flow diagnostics answer "where does the injected fluid go, and how fast?" from **one** pressure solve, without
 time stepping. From a converged flux field SubsurfiX computes:
 
@@ -157,7 +159,7 @@ w_blk = wells_for(blk["dims"], (5, 5), [(1, 1), (8, 8)])
 r_blk = analyse("Layered block", m_blk, w_blk)
 maps(r_blk, blk["dims"], 4, "nb14_block_maps.png")""",
 """md:### Multiphase state (fully implicit total flux)
-The water–oil fully implicit (FIM) run from notebook 12 runs here for 5 years on the same wells. Its water
+The fully implicit FVM water–oil run from notebook 12 runs here for 5 years on the same wells. Its water
 saturation fixes each cell's total mobility λt = krw/μw + kro/μo (Corey, the solver's own curves). Diagnostics on
 that frozen-mobility total-flux field show how the injected water bank changes the flow pattern compared with
 the single-phase field.""",
@@ -173,11 +175,11 @@ d_fim = dg.flow_diagnostics(m_blk, lam, w_blk)
 d_1p = r_blk["d"]
 inj_cells = w_blk[0]["cells"]
 rows = ["| Flux field | Lorenz | Ev at 1 PVI | INJ → PROD1 allocation (%) | Median total travel time (yr) |", "|---|---|---|---|---|"]
-for lab, d in (("single phase (water)", d_1p), ("FIM water–oil at 5 yr, frozen λt", d_fim)):
+for lab, d in (("single phase (water)", d_1p), ("FVM water–oil at 5 yr, frozen λt", d_fim)):
     tau = d["tof_forward"] + d["tof_backward"]
     a1 = 100 * d["well_pairs"][0]["injector_allocation"] / RATE
     rows.append(f"| {lab} | {d['lorenz']:.3f} | {np.interp(1, d['tD'], d['Ev']):.3f} | {a1:.1f} | {np.median(tau) / YR:.0f} |")
-display(Markdown(f"FIM run: {t_fim:.1f} s, {fim['n_steps']} steps, max Sw {sw.max():.3f}.\\n\\n" + "\\n".join(rows)))""",
+display(Markdown(f"FVM run: {t_fim:.1f} s, {fim['n_steps']} steps, max Sw {sw.max():.3f}.\\n\\n" + "\\n".join(rows)))""",
 """md:## 2 · Whole Kansas (KGS) property model
 This is the whole KGS property model used in notebooks 09, 10 and 12: 22 × 22 × 12 cells of 500 × 500 × 5 m
 (11 × 11 km, 60 m thick), with permeability taken from porosity. INJ is in the middle at (11, 11) and the
@@ -250,7 +252,7 @@ curves(RS, "nb14_fphi_sweep_response.png")""",
   slower). On these coarse grids `run_tracer` arrives earlier, by up to about 2.2× at 1 % and up to about 1.8× at
   50 %. That gap reflects numerical dispersion plus TOF's cell-centred lag, not different physics. Use TOF for fast
   ranking and screening, and `run_tracer` (the default) when the time-stepped response matters.
-- **Multiphase.** Freezing the FIM water–oil state's total mobility shows how the water bank changes the flow
+- **Multiphase.** Freezing the FVM water–oil state's total mobility shows how the water bank changes the flow
   pattern after 5 years.
 
 ## Limitations

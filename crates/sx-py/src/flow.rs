@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Larry Syu-Heng Lai
-//! Python bindings for `sx_core::flow`: two-point flux approximation (TPFA)
+//! Python bindings for `sx_core::flow`: two-point flux approximation
 //! pressure, Peaceman wells, tracer and two-phase IMPES. SI units.
 
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArrayDyn, PyUntypedArrayMethods};
@@ -312,11 +312,11 @@ pub(crate) fn rows2<'py>(py: Python<'py>, rows: &[Vec<f64>]) -> PyResult<Bound<'
     PyArray2::from_vec2(py, rows).map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
-/// Flow model: cells, pore volumes and TPFA transmissibilities.
+/// Flow model: cells, pore volumes and two-point flux approximation transmissibilities.
 #[pyclass(name = "FlowModel", module = "subsurfix._native")]
 pub struct PyFlowModel {
     pub(crate) m: FlowModel,
-    corners: Vec<[[f64; 3]; 8]>,
+    pub(crate) corners: Vec<[[f64; 3]; 8]>,
 }
 
 #[pymethods]
@@ -336,9 +336,39 @@ impl PyFlowModel {
         Ok(Self { m, corners: flow::ogs::regular_corners(&g) })
     }
 
+    /// Build on a conforming hexahedral bulk mesh shared by FVM and FEM.
+    /// `nodes`: float64 (n_nodes,3), x/y/depth in m; `cells`: int64 (n_cells,8),
+    /// corner order di+2*dj+4*dk. `perm`: m², `poro`: [0,1]. Shared faces must
+    /// share node IDs. Two-point flux approximation requires permeability-
+    /// orthogonal planar faces; skew/warped faces are rejected. No fault or
+    /// hanging-face treatment is inferred. `dims` is flat storage, not geometry;
+    /// use explicit cell IDs for wells. No tetrahedral/general polyhedral input.
+    #[staticmethod]
+    #[pyo3(signature = (nodes, cells, perm, poro, active=None))]
+    fn from_bulk_mesh(
+        nodes: PyReadonlyArray2<'_, f64>,
+        cells: PyReadonlyArray2<'_, i64>,
+        perm: PyReadonlyArray2<'_, f64>,
+        poro: PyReadonlyArray1<'_, f64>,
+        active: Option<Vec<bool>>,
+    ) -> PyResult<Self> {
+        let ns=nodes.as_array();let cs=cells.as_array();
+        if ns.ncols()!=3 || cs.ncols()!=8 {return Err(PyValueError::new_err("nodes need shape (n_nodes,3), cells (n_cells,8)"));}
+        let nodes=ns.rows().into_iter().map(|r|[r[0],r[1],r[2]]).collect();
+        let mut indices=Vec::with_capacity(cs.nrows());
+        for row in cs.rows() {
+            let mut ids=[0usize;8];
+            for v in 0..8 {ids[v]=usize::try_from(row[v]).map_err(|_|PyValueError::new_err("cell node IDs must be nonnegative"))?;}
+            indices.push(ids);
+        }
+        let mesh=flow::BulkMesh::new(nodes,indices).map_err(to_py_err)?;
+        let m=FlowModel::from_bulk_mesh(&mesh,&perm_of(&perm)?,poro.as_slice()?,active.as_deref()).map_err(to_py_err)?;
+        Ok(Self{m,corners:mesh.corners()})
+    }
+
     /// Build on a corner-point grid. `ntg` (n_cells,) net-to-gross; `mult` a
     /// dict of GRDECL multipliers (MULTX, MULTY, MULTZ, MULTX-, MULTY-,
-    /// MULTZ-) to (n_cells,) arrays. Faults get overlap (non-neighbour)
+    /// MULTZ-) to (n_cells,) arrays. Faults get non-neighbour
     /// connections and pinch-outs vertical connections; `fault_tol_m` is the
     /// throw / thickness tolerance.
     #[staticmethod]
@@ -362,7 +392,7 @@ impl PyFlowModel {
         Ok(Self { m, corners })
     }
 
-    /// Write the active cells to an OpenGeoSys (OGS) mesh (`.vtu`, ASCII):
+    /// Write the active cells to an OpenGeoSys mesh (`.vtu`, ASCII):
     /// hexahedra with merged shared nodes, z up (`z = -depth`), cell arrays
     /// `MaterialIDs` (`material_ids`, default 0), `bulk_cell_id`,
     /// `permeability` (m², 3 components), `porosity`, plus `cell_data`
@@ -993,7 +1023,7 @@ fn set_report_keys(d: &Bound<'_, PyDict>, every: usize, dir: Option<&str>, n: us
     Ok(())
 }
 
-/// Set the default worker-thread count of the flow solvers (0 = all cores).
+/// Set the default worker-thread count of the flow solvers (0 = RAYON_NUM_THREADS cap, otherwise all cores).
 #[pyfunction]
 pub fn set_flow_threads(n: usize) {
     flow::set_num_threads(n);

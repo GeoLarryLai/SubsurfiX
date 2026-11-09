@@ -3,7 +3,7 @@
 //! Flow and heat simulation on the regular and corner-point grids.
 //!
 //! * [`FlowModel`]: cells, pore volumes and two-point flux approximation
-//!   (TPFA) transmissibilities built from a [`RegularGrid`] or a
+//!   transmissibilities built from a [`RegularGrid`] or a
 //!   [`CornerPointGrid`] with a diagonal permeability tensor.
 //! * [`solve_pressure`]: incompressible pressure solve with Peaceman wells
 //!   (injector or producer, rate or bottom-hole pressure (BHP) control) and
@@ -18,10 +18,13 @@
 //! * [`run_heat`]: heat transport after the pressure solve (constant
 //!   properties, single-phase liquid, implicit upwind advection and
 //!   conduction, sparse LU).
-//! * [`ogs`]: export of the grid to an OpenGeoSys (OGS) `.vtu` mesh.
-//! * [`implicit`]: **experimental** fully implicit multiphase engine with
+//! * [`ogs`]: export of the grid to an OpenGeoSys `.vtu` mesh.
+//! * [`implicit`]: **experimental** fully implicit FVM solver with
 //!   operator-based linearization (OBL) ([`run_fim`]); physics in
 //!   [`fim_physics`] ([`DeadOil`], [`BlackOil`], [`Co2Brine`], [`ThermalWater`]).
+//! * [`fem`]: **experimental** finite-element water flow and heat transport
+//!   in the style of the OpenGeoSys HT process ([`run_fem_ht`]), on nodes
+//!   at the cell corners; same water, rock and wells as [`ThermalWater`].
 //! * [`ve`]: **experimental** CO2 vertical-equilibrium sharp-interface
 //!   model on a top-surface grid with spill-point and residual trapping
 //!   ([`ve::run_co2_ve`], [`ve::trap_analysis`]).
@@ -30,7 +33,7 @@
 //! * [`benchmarks`]: SPE10/OPM Flow comparison (stub, returns an error).
 //!
 //! Units are SI throughout: m, m², m³, Pa, Pa·s, s, m³/s (reservoir volume).
-//! Depth is positive down. Faults get overlap (non-neighbour) connections and pinch-outs
+//! Depth is positive down. Faults get non-neighbour connections from face overlaps and pinch-outs
 //! vertical connections across zero-thickness cells. Limits: [`solve_pressure`] / [`run_impes`] are
 //! incompressible without gravity or capillary pressure (use
 //! [`run_two_phase`] for those); fluid compressibility enters the water
@@ -38,9 +41,12 @@
 //! at wells or boundaries.
 
 pub mod analytic;
+pub mod bulk;
+pub use bulk::BulkMesh;
 pub mod benchmarks;
 pub mod co2_brine;
 pub mod diagnostics;
+pub mod fem;
 mod heat;
 pub mod fim_physics;
 pub mod implicit;
@@ -56,6 +62,7 @@ pub mod ve;
 mod transport;
 
 pub use diagnostics::{f_phi, flow_diagnostics, lorenz_coefficient, sweep_efficiency, DiagnosticsOptions, FlowDiagnostics, WellPair};
+pub use fem::{run_fem_ht, FemOptions, FemResult, HexMesh};
 pub use fim_physics::{BlackOil, Co2Brine, Co2BrineState, DeadOil, PvtRow, RockThermal, ThermalWater};
 pub use implicit::{run_fim, FimOptions, FimResult, OblPhysics, OblTable, OpLayout};
 pub use linsolve::{LinearSolver, LinearStats};

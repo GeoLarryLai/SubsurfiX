@@ -10,7 +10,7 @@ authors = [{ name = "Larry Syu-Heng Lai" }]
 requires-python = ">=3.12"
 license = "AGPL-3.0-or-later"
 license-files = ["LICENSE", "NOTICE"]
-readme = "README.md"
+readme = "README-pypi.md"
 dependencies = [
     "numpy>=1.26.4",
     "pyarrow>=25.0.0",

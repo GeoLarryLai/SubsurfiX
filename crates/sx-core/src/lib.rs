@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Larry Syu-Heng Lai
-//! SubsurfiX engine core.
+//! SubsurfiX Rust core.
 
 // `!(x > 0.0)` is used on purpose: it is true for NaN, so one test rejects
 // both bad values and NaN.

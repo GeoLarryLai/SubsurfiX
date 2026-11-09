@@ -1,4 +1,7 @@
-"""Fluid injection on the whole Kansas (KGS) property model with FIM-OBL (local study script).
+"""Fluid injection on the whole Kansas (KGS) property model with FVM (local study script).
+
+The FVM results use the SubsurfiX FIM-OBL solver, inspired by open-DARTS; MODFLOW 6 is a separate
+FVM-family control-volume finite-difference solver, not FEM or FIM-OBL.
 
 Runs the example-12 cases (water-oil, oil-gas, CO2-brine) on the Kansas model on its structural top
 (``kansas_structural``: 22 x 22 x 12 cells of 500 x 500 x 5 m, layers following the top surface, the
@@ -185,7 +188,7 @@ def render(bm, runs, inj, prod, a, out):
                     bar_fmt="%.1f", plume=0.05, context_opacity=0.22, panel_size=(480, 400),
                     **background_args(bm, a),
                     still=gif.with_suffix(".png"), section=sec,
-                    header=f"Mississippian interval, Kansas: fluid injection with FIM-OBL over {a.years} years",
+                    header=f"Mississippian interval, Kansas: fluid injection with FVM over {a.years} years",
                     footer=(f"Vertical exaggeration 40x   model 11 x 11 km, 60 m thick, 12 layers on the structural top, "
                             f"{n_act} active cells (south-east block without well control inactive)\n"
                             f"blue: injector, red: producer (fixed BHP), {dist:.1f} km apart, "

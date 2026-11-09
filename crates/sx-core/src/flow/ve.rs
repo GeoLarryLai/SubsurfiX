@@ -21,7 +21,7 @@
 //! each column).
 //!
 //! Time stepping: IMPES. Each step solves the incompressible total-flux
-//! pressure equation (TPFA, upwinded mobilities from the previous step,
+//! pressure equation (two-point flux approximation, upwinded mobilities from the previous step,
 //! Jacobi-preconditioned conjugate gradients), then updates the CO2 volume
 //! explicitly with upwind CO2 fluxes under a CFL limit. The CO2 volume per
 //! column is the conserved variable; `h`, `h_max` follow from it, so the
@@ -432,7 +432,7 @@ pub struct VeResult {
 /// Inventory column names of [`VeResult::inventory`].
 pub const INVENTORY: [&str; 6] = ["injected", "in_place", "residual", "structural", "free_plume", "exited"];
 
-/// Jacobi-preconditioned CG on a sym. positive-definite TPFA matrix.
+/// Jacobi-preconditioned conjugate gradient linear solve on a sym. positive-definite two-point flux approximation matrix.
 fn pcg(n: usize, diag: &[f64], off: &[(usize, usize, f64)], b: &[f64], x: &mut [f64]) -> SxResult<()> {
     let mul = |v: &[f64], out: &mut [f64]| {
         for i in 0..n {

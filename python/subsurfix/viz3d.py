@@ -170,6 +170,11 @@ def load_frames_npz(path):
     return grid, frames, d["times"], str(d["name"]), str(d["units"])
 
 
+def _rotation_step(rotate, rotate_deg, n_steps):
+    """Per-frame azimuth increment; ``rotate=False`` always gives a fixed camera."""
+    return float(rotate_deg) / max(int(n_steps) - 1, 1) if rotate else 0.0
+
+
 def animate_grid(
     grid: RegularGrid,
     frames,
@@ -184,6 +189,7 @@ def animate_grid(
     fps=6,
     width=800,
     height=560,
+    rotate=True,
     rotate_deg=40.0,
     cutaway=True,
     z_exaggeration=1.0,
@@ -198,7 +204,8 @@ def animate_grid(
     """Render ``frames`` (n_steps, n_cells) on ``grid`` to a GIF or MP4 at ``out``.
 
     The grid is shown with one quarter cut away (``cutaway``) so the interior is visible,
-    wells as tubes, and the camera turns ``rotate_deg`` degrees over the animation.
+    wells as tubes. ``rotate`` turns camera motion on or off; when on, ``rotate_deg`` is
+    the total azimuth sweep in degrees over all output frames (default 40). ``rotate=False`` overrides it.
     ``still`` writes one PNG of frame ``still_index``. ``bar_fmt`` formats the colour-bar labels.
     """
     import pyvista as pv
@@ -288,7 +295,7 @@ def animate_grid(
     else:
         pl.open_movie(str(out), framerate=fps)
     steps = list(range(len(frames))) + [len(frames) - 1] * hold_last
-    da = rotate_deg / max(len(steps) - 1, 1)
+    da = _rotation_step(rotate, rotate_deg, len(steps))
     for n, i in enumerate(steps):
         mesh.cell_data[label] = grid.to_display(frames[i])
         actor.mapper.SetInputData(mesh.clip_box(box, invert=True, crinkle=True) if cutaway else mesh.copy())
@@ -321,6 +328,7 @@ def animate_grids(
     shape=None,
     fps=5,
     panel_size=(420, 420),
+    rotate=True,
     rotate_deg=30.0,
     cutaway=True,
     z_exaggeration=1.0,
@@ -339,7 +347,8 @@ def animate_grids(
     ``bar_fmt`` and ``bar`` (draw a colour bar in this panel) per panel; otherwise the shared values are used and
     one colour bar is drawn in the last panel. ``shape`` is (rows, columns), default one row. Every panel uses the
     same camera (linked and turned together), wells and cutaway, with one shared time stamp, so the panels can be
-    compared frame by frame. ``colors`` is the GIF palette size (fewer colours give a smaller file).
+    compared frame by frame. ``rotate`` switches camera motion on/off; ``rotate_deg`` is the total azimuth
+    sweep in degrees across output frames (default 30), ignored when ``rotate=False``. ``colors`` is the GIF palette size (fewer colours give a smaller file).
     ``grid`` may be a :class:`RegularGrid` or a :class:`LayeredGrid` (structural top, inactive cells hidden);
     see :func:`animate_layered` for a figure with header, footer and plume highlighting.
     """
@@ -393,6 +402,14 @@ def animate_grids(
         meshes.append((mesh, sname))
         if isinstance(grid, RegularGrid):
             pl.add_mesh(mesh.outline(), color="#444444", line_width=1)
+        for surface, color in o.get("fault_surfaces", []):
+            pl.add_mesh(surface.scale([1, 1, zt], inplace=False), color=color,
+                        opacity=0.38, show_edges=False, show_scalar_bar=False,
+                        lighting=False)
+            border = surface.extract_feature_edges(boundary_edges=True, feature_edges=False,
+                                                    non_manifold_edges=False, manifold_edges=False)
+            pl.add_mesh(border.scale([1, 1, zt], inplace=False), color=color,
+                        line_width=2.0, lighting=False)
         for w in wells:
             top = -w.top * zt + max(0.12 * nz * dz * zt, 0.08 * max(nx * dx, ny * dy))
             line = pv.Line((w.x, w.y, top), (w.x, w.y, -w.bottom * zt))
@@ -415,7 +432,7 @@ def animate_grids(
     else:
         pl.open_movie(str(out), framerate=fps)
     steps = list(range(len(times))) + [len(times) - 1] * hold_last
-    da = rotate_deg / max(len(steps) - 1, 1)
+    da = _rotation_step(rotate, rotate_deg, len(steps))
     for n, i in enumerate(steps):
         for (_, f, _o), (mesh, sname), actor in zip(data, meshes, actors):
             mesh.cell_data[sname] = grid.to_display(f[i])
@@ -492,6 +509,12 @@ def _colorbar_image(o, w, h, vertical=False):
     return Image.open(buf).convert("RGB").resize((w, h))
 
 
+def _overlay_change(values, reference, positive_only=False):
+    """Opt-in positive change; legacy plots retain absolute-change masking."""
+    delta = np.asarray(values) - np.asarray(reference)
+    return np.maximum(delta, 0.0) if positive_only else np.abs(delta)
+
+
 def _section_image(sec, v, v0, o, w, h, background=None, bg_clim=None, dmax=None, bg_cmap="porosity_grey"):
     """Matplotlib picture of a vertical cross-section (see ``section`` in :func:`animate_layered`)."""
     import io
@@ -512,7 +535,7 @@ def _section_image(sec, v, v0, o, w, h, background=None, bg_clim=None, dmax=None
             z0 = top + k * dz
             polys.append([(d - half, z0), (d + half, z0), (d + half, z0 + dz), (d - half, z0 + dz)])
             vals.append(v[c])
-            chg.append(abs(v[c] - v0[c]))
+            chg.append(float(_overlay_change(v[c], v0[c], o.get("positive_change_only", False))))
             bg.append(np.nan if background is None else background[c])
     fig = plt.figure(figsize=(w / 100, h / 100), dpi=100)
     ax = fig.add_axes((0.11, 0.2, 0.74, 0.6))
@@ -537,6 +560,11 @@ def _section_image(sec, v, v0, o, w, h, background=None, bg_clim=None, dmax=None
             pc.set_alpha(o.get("section_alpha", 0.6)
                          * _change_alpha(chg[sel], thr, dmax, o.get("plume_above_median") is not None))
             ax.add_collection(pc)
+    # Optional smooth geometric fault intersections; independent of flow discretization.
+    for points, color in o.get("fault_section", []):
+        points = np.asarray(points, float)
+        if len(points) > 1:
+            ax.plot(points[:, 0], points[:, 1], color=color, lw=1.7, zorder=8)
     for d, z0, z1, color, name in sec.get("wells", []):
         ax.plot([d / 1000.0] * 2, [z0, z1], color=color, lw=4, solid_capstyle="butt")
         ax.text(d / 1000.0, z0 - 2, name, color=color, ha="center", va="bottom", fontsize=7, fontweight="bold",
@@ -581,6 +609,7 @@ def animate_layered(
     shape=None,
     fps=4,
     panel_size=(460, 380),
+    rotate=True,
     rotate_deg=20.0,
     z_exaggeration=40.0,
     view_dir=(1.0, -0.35, 0.75),
@@ -610,7 +639,10 @@ def animate_layered(
     usually shown: real cell geometry, inactive cells hidden, vertical exaggeration ``z_exaggeration``, wells as
     vertical sticks above the top surface, an x/y/z orientation marker (``axes``), and a ``header`` line above and
     ``footer`` line(s) below the panels with the time stamp at the top right. ``view_dir`` is the direction from
-    the model towards the camera; the camera turns ``rotate_deg`` degrees over the animation.
+    the model towards the camera at the first frame (x east, y north, z up); the sweep then adds
+    ``rotate_deg`` of azimuth. ``rotate`` switches the camera sweep on/off; when on, ``rotate_deg``
+    is the total azimuth sweep in degrees over all output frames (default 20, a gentle sweep).
+    ``rotate=False`` keeps the camera fixed even when ``rotate_deg`` is nonzero.
 
     ``plume`` (a number) highlights change: cells whose value differs from the first frame by more than ``plume``
     are drawn opaque and only the outer surface of the rest of the model is drawn, at ``context_opacity``, so a plume or front inside the model is
@@ -621,6 +653,8 @@ def animate_layered(
     ``plume_above_median`` (a margin) sets the threshold in each frame to the median change over the model plus
     the margin, so only change above the model-wide background (e.g. near-well pressure build-up) is coloured;
     ``section_alpha`` (default 0.6) scales the overlay opacity in the cross-section.
+    ``positive_change_only=True`` in a panel masks depletion rather than colouring abs(change).
+    ``fault_surfaces`` draws smooth depth-negative surfaces in that panel, scaled by the same vertical exaggeration.
     ``plume_frac`` sets the threshold as a fraction of the largest change in the run instead of ``plume``.
 
     ``background`` (one value per cell, e.g. porosity) colours the faint shell in greyscale instead of plain grey,
@@ -684,10 +718,10 @@ def animate_layered(
         o["_ref"] = (f[0] if o.get("ref") is None
                      else np.broadcast_to(np.asarray(o["ref"], float), f[0].shape).astype(float))
         if o["plume"] is not None and o.get("change_max") is None:
-            o["change_max"] = float(np.nanmax(np.abs(f - o["_ref"])))
+            o["change_max"] = float(np.nanmax(_overlay_change(f, o["_ref"], o.get("positive_change_only", False))))
         if o.get("plume_frac") is not None:  # threshold as a fraction of the largest change in the run
-            o["plume"] = float(o["plume_frac"]) * float(np.nanmax(np.abs(f - o["_ref"])))
-            o["change_max"] = o.get("change_max") or float(np.nanmax(np.abs(f - o["_ref"])))
+            o["plume"] = float(o["plume_frac"]) * float(np.nanmax(_overlay_change(f, o["_ref"], o.get("positive_change_only", False))))
+            o["change_max"] = o.get("change_max") or float(np.nanmax(_overlay_change(f, o["_ref"], o.get("positive_change_only", False))))
         bar = {"title": f"{o['label']} ({o['units']})" if o["units"] else o["label"], "color": "#222222",
                "n_labels": 5, "fmt": o["bar_fmt"], "vertical": False, "position_x": 0.2, "position_y": 0.03,
                "height": 0.07, "width": 0.6, "title_font_size": 13, "label_font_size": 11}
@@ -711,6 +745,15 @@ def animate_layered(
                 a_pl.append(pl.add_mesh(mesh.copy(), show_scalar_bar=False,
                                         specular=0.0, ambient=0.25, diffuse=0.8, opacity=op, **style))
         state.append((mesh, sname, a_ctx, a_pl))
+        # Layered plots need their own overlays; animate() is a separate renderer.
+        for surface, color in o.get("fault_surfaces", []):
+            pl.add_mesh(surface.scale([1, 1, zt], inplace=False), color=color,
+                        opacity=o.get("fault_opacity", 0.65), show_edges=False,
+                        show_scalar_bar=False, lighting=False)
+            border = surface.extract_feature_edges(boundary_edges=True, feature_edges=False,
+                                                   non_manifold_edges=False, manifold_edges=False)
+            pl.add_mesh(border.scale([1, 1, zt], inplace=False), color=color,
+                        line_width=2.5, lighting=False)
         for w in wells:
             top = -w.top * zt + max(0.15 * nz * dz * zt, 0.08 * width)
             line = pv.Line((w.x, w.y, top), (w.x, w.y, -w.bottom * zt))
@@ -773,7 +816,7 @@ def animate_layered(
         return canvas
 
     steps = list(range(len(times))) + [len(times) - 1] * hold_last
-    da = rotate_deg / max(len(steps) - 1, 1)
+    da = _rotation_step(rotate, rotate_deg, len(steps))
     images = []
     for n, i in enumerate(steps):
         for (_, f, o), (mesh, sname, a_ctx, a_pl) in zip(data, state):
@@ -781,10 +824,10 @@ def animate_layered(
             if a_pl is None:
                 a_ctx.mapper.SetInputData(mesh.copy())
             else:
-                chg = np.abs(grid.to_display(f[i]) - grid.to_display(o["_ref"]))
+                chg = _overlay_change(grid.to_display(f[i]), grid.to_display(o["_ref"]), o.get("positive_change_only", False))
                 o["_thr"] = o["plume"]
                 if o.get("plume_above_median") is not None:  # only cells rising above this frame's model-wide rise
-                    o["_thr"] = float(np.nanmedian(np.abs(f[i] - o["_ref"]))) + float(o["plume_above_median"])
+                    o["_thr"] = float(np.nanmedian(_overlay_change(f[i], o["_ref"], o.get("positive_change_only", False)))) + float(o["plume_above_median"])
                 sel = np.flatnonzero(chg > o["_thr"])
                 alpha = _change_alpha(chg[sel], o["_thr"], o["change_max"], o.get("plume_above_median") is not None)
                 lev = np.searchsorted(ALPHA_EDGES, alpha)

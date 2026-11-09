@@ -39,7 +39,7 @@ thread_local! {
 }
 
 /// Set the default number of threads for the flow and heat solvers;
-/// 0 (the default) uses every core, 1 runs sequentially.
+/// 0 (the default) respects RAYON_NUM_THREADS, otherwise uses every core; 1 runs sequentially.
 pub fn set_num_threads(n: usize) {
     N_THREADS.store(n, Ordering::Relaxed);
 }
@@ -52,7 +52,10 @@ pub fn num_threads() -> usize {
 
 fn resolve(n: usize) -> usize {
     if n == 0 {
-        std::thread::available_parallelism().map_or(1, |v| v.get())
+        // Respect the standard Rayon process cap for our scoped solver pools too.
+        let cores = std::thread::available_parallelism().map_or(1, |v| v.get());
+        std::env::var("RAYON_NUM_THREADS").ok().and_then(|v| v.parse::<usize>().ok())
+            .filter(|&v| v > 0).map_or(cores, |v| v.min(cores))
     } else {
         n
     }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Larry Syu-Heng Lai
-//! **Experimental** physics for the OBL fully implicit engine
+//! **Experimental** physics for the fully implicit FVM solver with operator-based linearization
 //! ([`super::implicit`]).
 //!
 //! * [`DeadOil`]: water and oil components, each in its own phase
@@ -315,7 +315,7 @@ impl Default for RockThermal {
 }
 
 /// Rock internal energy reference temperature (K).
-const T_REF_ROCK: f64 = 273.15;
+pub(super) const T_REF_ROCK: f64 = 273.15;
 
 /// **Experimental.** Single-phase liquid water with an energy equation:
 /// state `[p, T]`, equations `[water mass, energy]`. Density, enthalpy,
@@ -340,7 +340,7 @@ impl ThermalWater {
         Self { rock, c_rock, p_ref, fallbacks: Fallbacks::default() }
     }
 
-    fn props(&self, p: f64, t: f64) -> super::water::LiquidWater {
+    pub(super) fn props(&self, p: f64, t: f64) -> super::water::LiquidWater {
         if let Ok(w) = super::water::liquid(p, t) {
             return w;
         }

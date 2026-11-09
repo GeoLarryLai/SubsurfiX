@@ -1,6 +1,21 @@
 # Examples
 
-One notebook per workflow step. Run them in order; 03–05 and 08 reuse files written by earlier notebooks. 09–12 are self-contained: 09, 10 and 12 first run a layered block model built in code (`block_model.py`), then the same workflow in a "Real-world case" section on the Kansas (KGS) property model committed in `data/kansas_window/` (read by `kansas_window.py`): 09 and 10 use the whole model (22 × 22 × 12 cells, 11 × 11 km × 60 m), 12 a 10 × 10 × 12 window of it. 13 builds its faulted corner-point grid in code and compares the full 3D solver (FIM-OBL) with CO₂ VE on it; 14 reuses the block model, the whole Kansas model and a smaller version of the faulted block.
+The two in-package FVM solvers are the open-DARTS-inspired FIM-OBL solver and the
+MODFLOW-inspired control-volume finite-difference solver (Rust translation). The latter is not the
+official USGS MODFLOW 6 program. Where an example explicitly invokes `mf6` through FloPy, that is
+an outside check with official USGS MODFLOW 6. FEM uses the OpenGeoSys-style continuous Galerkin
+finite-element solver, including experimental coupled water pressure and temperature; complete
+multiphase simulation remains FVM-only.
+
+
+Method names are FVM and FEM. The featured README Kansas GIF compares FVM and FEM pressure and temperature in a 2×2 layout.
+The FVM results use the FIM-OBL solver; FEM uses the OpenGeoSys-style continuous Galerkin finite-element solver. This comparison shows water-injection pressure and temperature, not saturation.
+Official MODFLOW 6 external checks remain in notebooks 09 and 10, not in the featured FVM-versus-FEM figure.
+FEM here has one OpenGeoSys-style continuous Galerkin finite-element solver for experimental coupled
+water pressure and temperature. Notebook 15 compares FVM with FEM. Notebook 10 retains the existing
+split SubsurfiX `run_heat` routine; it must not be mislabelled as a FIM-OBL run.
+
+One notebook per workflow step. Run them in order; 03–05 and 08 reuse files written by earlier notebooks. 09–12 are self-contained: 09, 10 and 12 first run a layered block model built in code (`block_model.py`), then the same workflow in a "Real-world case" section on the Kansas (KGS) property model committed in `data/kansas_window/` (read by `kansas_window.py`): 09 and 10 use the whole model (22 × 22 × 12 cells, 11 × 11 km × 60 m), 12 a 10 × 10 × 12 window of it. 13 builds its faulted corner-point grid in code and compares the full 3D FVM solver with CO₂ VE on it; 14 reuses the block model, the whole Kansas model and a smaller version of the faulted block.
 
 | Notebook | What it shows |
 |---|---|
@@ -8,7 +23,7 @@ One notebook per workflow step. Run them in order; 03–05 and 08 reuse files wr
 | 02_well_correlation | DTW well correlation onto a relative-geologic-time axis |
 | 03_grid_and_upscaling | Corner-point grid following a mapped top; log upscaling to cells |
 | 04_property_modelling | Variogram, kriging, SGS, SIS and ML propagation |
-| 05_water_injection | Two-phase water injection with the built-in flow solver |
+| 05_water_injection | Two-phase water injection with the built-in FVM solver |
 | 06_heat_doublet_and_ogs_export | Heat transport check, geothermal doublet, OpenGeoSys VTU export |
 | 07_wister_geothermal_well | Log washout flags and PTS survey for a geothermal well |
 | 08_grdecl_export | GRDECL grid and property export with a read-back check |
@@ -16,13 +31,14 @@ One notebook per workflow step. Run them in order; 03–05 and 08 reuse files wr
 | 10_modflow_heat | MODFLOW 6 GWE heat doublet with multi-layer wells on a layered block model and a Kansas KGS window (needs `mf6`) |
 | 11_leapfrog_omf | OMF export and read-back for Leapfrog (experimental) |
 | 12_multiphase_fluids | Experimental fully implicit water–oil, oil–gas and CO₂–brine runs on a layered block model and a Kansas KGS window, with 3D GIFs |
-| 13_cornerpoint_and_co2_ve | Faulted corner-point block: fault-overlap transmissibilities, a FIM run across the fault, and an experimental CO₂ vertical-equilibrium plume with spill-point and residual trapping |
+| 13_cornerpoint_and_co2_ve | Faulted corner-point block: fault-overlap transmissibilities, a fully implicit FVM run across the fault, and an experimental CO₂ vertical-equilibrium plume with spill-point and residual trapping |
 | 14_flow_diagnostics | Flow diagnostics (time of flight, tracer partitions, well pairs, F–Φ, Lorenz, sweep) on the block model, the Kansas KGS window and a faulted corner-point block, with a run_tracer vs TOF comparison |
+| 15_fem_vs_fim_heat | Experimental continuous Galerkin FEM water + heat solver (OpenGeoSys-style) (`run_fem_thermal_water`) against FVM on the heat doublet, on a layered block model and the Kansas KGS structural model |
 
 Data: `scripts/fetch_open_data.sh` (KGS wells, Wister) and `scripts/fetch_force2020.sh` (FORCE 2020).
 Environment variables: `SX_EXAMPLE_PROJECT` (KGS project folder, default `kgs_project/`), `SX_EXAMPLE_OUT`
 (figures and intermediate files, default `outputs/`), `SX_WISTER` (Wister data folder).
-To regenerate the notebooks: `python _build_notebooks.py` (01–08), `_build_nb09.py`, `_build_nb10.py`, `_build_nb12.py`, `_build_nb13.py` and `_build_nb14.py`, then execute them with `jupyter nbconvert --execute --inplace`.
+To regenerate the notebooks: `python _build_notebooks.py` (01–08), `_build_nb09.py`, `_build_nb10.py`, `_build_nb12.py`, `_build_nb13.py`, `_build_nb14.py` and `_build_nb15.py`, then execute them with `jupyter nbconvert --execute --inplace`.
 
 ## Setup
 

@@ -10,7 +10,7 @@
 > [!WARNING]
 > **SubsurfiX** is under active development, and many functions are still experimental and not fully validated. Please use with caution.
 
-**SubsurfiX** is developed to automate workflows for subsurface geological analysis and reservoir modeling, including (1) machine-learning (ML) or statistically assisted well-log quality control (QC) and data-gap prediction, (2) core-to-log calibration and 3D property modeling, (3) Dynamic Time Warping (DTW) assisted stratigraphic correlation between wells, and (4) flow and heat simulations for injection–production purposes. The engine is written in [Rust](https://www.rust-lang.org/) and wrapped in a Python skin.
+**SubsurfiX** is developed to automate workflows for subsurface geological analysis and reservoir modeling, including (1) machine-learning (ML) or statistically assisted well-log quality control (QC) and data-gap prediction, (2) core-to-log calibration and 3D property modeling, (3) Dynamic Time Warping (DTW) assisted stratigraphic correlation between wells, and (4) flow and heat simulations for injection–production purposes. The core is written in [Rust](https://www.rust-lang.org/) and wrapped in a Python skin.
 
 ## Installation
 
@@ -52,7 +52,7 @@ Lai, L.S.-H. (2026) SubsurfiX. *Zenodo*, [https://doi.org/10.5281/zenodo.2383200
   industry reservoir tools), and fill them with porosity and rock type by kriging, simulation or machine learning,
   with low/mid/high (P10/P50/P90) cases. Rock types: sandstone, shale, limestone, dolomite and cherty carbonate.
 - **Data exchange.** [Leapfrog](https://www.seequent.com/products-solutions/leapfrog-geo/) through
-  [OMF](https://github.com/gmggroup/omf) files, and [OpenGeoSys](https://www.opengeosys.org) (OGS, an open-source
+  [OMF](https://github.com/gmggroup/omf) files, and [OpenGeoSys](https://www.opengeosys.org) (an open-source
   finite-element code for coupled thermal, hydraulic, mechanical and chemical processes; Kolditz et al., 2012)
   mesh files (`.vtu`).
 
@@ -102,14 +102,51 @@ Flow and heat simulations in SubsurfiX rest on two balances:
 - **Energy balance (heat transport).** Heat is carried along by moving fluid and also spreads by conduction
   through rock and fluid; the heat stored in a cell changes by what flows in and out.
 
-These equations are solved on a grid of cells. SubsurfiX uses the **finite-volume** method: the model is split into
-cells, and whatever leaves one cell enters its neighbour, so mass and energy are conserved exactly. Cells are
-connected by two-point flux approximation (TPFA: the flow between two cells depends on their pressure
-difference).
+The governing physics is mass conservation plus Darcy-type flow, with optional heat or multiphase
+extensions. FVM and FEM can discretize the same governing equations; a fair comparison also matches
+constitutive properties, initial and boundary conditions, wells, and the enabled physics.
 
-## Method overview
+**Methods.** The **finite-volume method (FVM)** balances fluxes for each cell: an internal connection
+contributes equal and opposite fluxes to its two cells. The implemented FVM uses a **two-point flux
+approximation**, with **non-neighbour connections** where needed across faults. The **finite-element
+method (FEM)** instead assembles a weak form using element shape functions; the FEM formulation here is
+**continuous Galerkin**. Use FVM and FEM as the method labels in plots and comparisons.
 
-The methods below build on these packages; SubsurfiX does not call any of them, except MODFLOW 6 through FloPy:
+**Meshes.** A **corner-point grid** describes cells using pillars and corner depths. **Bulk mesh** means
+the volume mesh of the domain, rather than a boundary mesh; it is not a synonym for unstructured mesh
+and is not a different physical model. These mesh names do not imply that both methods already support
+both mesh types. The FVM solver supports regular and corner-point grids. The experimental FEM solver supports water flow
+and heat on regular grids and valid face-to-face corner-point hexahedra; it rejects faulted grids. Conforming hexahedral bulk-mesh input is available through `FlowModel.from_bulk_mesh` for both
+methods; its FVM connections require planar, permeability-orthogonal faces. General skew/polyhedral
+fluxes and fault-interface treatment for FEM are not yet implemented.
+
+**Discretization and solvers.** Discretization turns continuous equations into a finite algebraic system:
+FVM or FEM specifies the spatial discretization, and a time scheme specifies the temporal discretization.
+The **FVM solver** for the fully implicit results is the **FIM-OBL solver**: **fully implicit method (FIM)**
+with **operator-based linearization (OBL)**. It uses backward Euler time stepping and solves the coupled
+unknowns together with Newton iterations and tabulated operators. Other FVM routines use implicit pressure
+and explicit saturation or separate heat transport; FVM does not itself imply fully implicit coupling.
+The **FEM solver** is a **continuous Galerkin finite-element solver** (OpenGeoSys-style FEM); it supports the experimental water-flow and heat workflow described below, not general multiphase flow. “Solver” means the numerical
+implementation; “linear solver” and “nonlinear solver” name its algebraic components. Implementation
+names such as `run_fim_*` remain unchanged.
+
+## Methods and solvers
+
+FVM and FEM are the two spatial methods. The package provides **two FVM solvers**:
+1. An **open-DARTS-inspired FIM-OBL solver** (fully implicit method with operator-based linearization).
+2. A **MODFLOW-inspired control-volume finite-difference solver**, translated into Rust for the
+   single-fluid pressure and heat routines. This is not the official USGS MODFLOW 6 program.
+
+FEM here uses one **OpenGeoSys-style continuous Galerkin finite-element solver**. Experimental FEM
+supports coupled water pressure and temperature; complete multiphase simulation remains FVM-only.
+
+The featured Kansas cold-water animation compares **FVM and FEM pressure and temperature** in a
+2 × 2 layout: FVM pressure | FEM pressure, above FVM temperature | FEM temperature. The FVM results
+use the FIM-OBL solver; FEM uses the OpenGeoSys-style continuous Galerkin finite-element solver.
+These are coupled thermal-water results, not multiphase saturation panels. Separate official MODFLOW 6
+external checks remain in notebooks 09/10; neither MODFLOW implementation appears in this figure.
+
+These references inspired the in-package Rust implementations; the separate official MODFLOW 6 external checks call its program through FloPy:
 
 - [open-DARTS](https://gitlab.com/open-darts/open-darts) (open Delft Advanced Research Terra Simulator), a finite-volume simulator:
   Voskov et al. (2024); Voskov (2017); Khait and Voskov (2017).
@@ -120,14 +157,20 @@ The methods below build on these packages; SubsurfiX does not call any of them, 
   modular hydrologic model: Langevin et al. (2017); run through [FloPy](https://github.com/modflowpy/flopy):
   Bakker et al. (2016).
 
-| Method | Fluids | Thermo | Grids | Pros & Cons |
+| Solver or reduced model | Fluids | Thermo | Grids | Pros & Cons |
 |---|---|---|---|---|
-| **FIM-OBL** (default): fully implicit (FIM: all unknowns solved together each time step) finite-volume solver with operator-based linearization (OBL: fluid properties from pre-computed tables)<br><sub>Adapted from [open-DARTS](https://gitlab.com/open-darts/open-darts)</sub> | Water, water–oil, oil–gas, CO₂–brine | ✅ | Regular, corner-point (faulted) | 👍: every fluid system plus heat<br>👎: slowest of the three |
-| **MODFLOW 6**: groundwater flow and energy transport<br><sub>[MODFLOW 6](https://www.usgs.gov/software/modflow-6-usgs-modular-hydrologic-model) through [FloPy](https://github.com/modflowpy/flopy)</sub> | Water only | ✅ | Regular | 👍: widely tested reference, fast<br>👎: single fluid; needs the `mf6` program |
+| **FVM — FIM-OBL solver** (default fully implicit solver): using the fully implicit method with operator-based linearization (fluid properties from pre-computed tables)<br><sub>Adapted from [open-DARTS](https://gitlab.com/open-darts/open-darts)</sub> | Water, water–oil, oil–gas, CO₂–brine | ✅ | Regular, corner-point (faulted) | 👍: every fluid system plus heat<br>👎: slower than MODFLOW 6 and VE |
+| **FVM — MODFLOW-inspired control-volume finite-difference solver** (Rust translation): single-fluid pressure and separate heat transport (`run_pressure`, `run_heat`) | Water only | ✅ | Regular, corner-point | 👍: in-package Rust routines<br>👎: not the coupled multiphase FIM-OBL solver |
+| **External FVM check — USGS MODFLOW 6**: official groundwater flow and energy transport<br><sub>[MODFLOW 6](https://www.usgs.gov/software/modflow-6-usgs-modular-hydrologic-model) through [FloPy](https://github.com/modflowpy/flopy)</sub> | Water only | ✅ | Regular | 👍: widely tested reference, fast<br>👎: single fluid; needs the `mf6` program |
+| **FEM** (experimental): continuous Galerkin finite-element water flow and heat (OpenGeoSys-style FEM), with pressure and temperature at the cell corners<br><sub>After [OpenGeoSys](https://www.opengeosys.org)</sub> | Water only | ✅ | Regular, corner-point without faults | 👍: same water, rock and wells as FVM, so the two compare directly (notebook 15)<br>👎: experimental, not yet checked against OpenGeoSys; closed outer boundary only |
 | **CO₂ vertical-equilibrium (VE) model**<br><sub>Based on [MRST](https://www.sintef.no/projectweb/mrst/)</sub> | CO₂–brine | ❌ | Regular, corner-point (top surface) | 👍: runs in seconds; structural and residual trapping<br>👎: CO₂ as a thin layer under the caprock; no dissolution |
-| **Corner-point faulted grids**: GRDECL reader and fault connections<br><sub>Based on [MRST](https://www.sintef.no/projectweb/mrst/)</sub> | Grid input, not a solver | – | Corner-point with faults | 👍: real faulted grids for FIM-OBL and VE<br>👎: faults are geometric overlaps; fault-rock properties only through multipliers |
 
-**Linear solver and running several cases.** FIM-OBL solves each time step iteratively by default: GMRES
+
+Corner-point grids are grid input, not a competing solver: the GRDECL reader builds fault-overlap
+connections for FVM. Fault-rock effects enter through transmissibility multipliers; the vertical-equilibrium
+model uses the top surface.
+
+**Linear solver and running several cases.** The fully implicit FVM solver solves each time step iteratively by default: GMRES
 (generalized minimal residual; Saad and Schultz, 1986) with a CPR (constrained pressure residual; Wallis, 1983)
 preconditioner and algebraic multigrid (Notay, 2010), falling back to a direct solve if needed
 (`linear_solver="direct"` forces it; same answers, slower). `subsurfix.parallel.run_cases` runs several cases in
@@ -145,31 +188,93 @@ them on a shared relative geologic time axis (Wheeler and Hale, 2014).
   to its Delaunay neighbours. A minimum spanning tree (Kruskal, 1956) keeps the whole field connected, and a robust
   Tukey biweight (Beaton and Tukey, 1974) reweights each match, so a poor match between two wells is down-weighted.
 
-### FIM-OBL against MODFLOW 6: cold-water injection on the Kansas model
+### FVM versus FEM: Kansas water-injection pressure and temperature
 
-**Purpose:** check that FIM-OBL (fully implicit, operator-based linearization) reproduces MODFLOW 6, the U.S. Geological Survey standard code, for water flow and heat on a real reservoir model.
+**Purpose:** compare FVM and FEM pressure and temperature for cold-water injection on the same unfaulted Kansas reservoir model.
 
-<p align="center"><img src="image/methods_compare_kansas.gif" alt="Cold-water injection on the whole Kansas model, MODFLOW 6 and FIM-OBL pressure and temperature" width="100%"></p>
+<p align="center"><img src="image/fem_vs_fim_kansas.gif" alt="Kansas water injection: FVM pressure and FEM pressure above FVM temperature and FEM temperature, a two-by-two thermal-water comparison" width="100%"></p>
 
-**Highlights**
-- Temperatures agree closely: the largest difference in any cell is 6.4 °C, the mean 0.31 °C.
-- The cold front reaches the producer after 65 years in FIM-OBL and 40 years in MODFLOW 6; after 200 years the
-  producer is at 69.1 °C and 63.5 °C.
-- FIM-OBL ran in 107 s, MODFLOW 6 in 5.9 s.
+*The FVM results use the FIM-OBL solver; FEM uses the OpenGeoSys-style continuous Galerkin finite-element solver. This comparison shows water-injection pressure and temperature, not saturation.*
+
+The original Kansas FVM arrays were reused unchanged; only FEM was computed for this comparison.
+The top row shows pressure and the bottom row temperature, with FVM on the left and FEM on the right.
+This is an experimental comparison, not a claim that the two discretizations give identical results.
+
+**Results at 200 years (FVM / FEM)**
+- Producer temperature: **69.08 / 65.36 °C**; maximum producer-temperature difference over the report times: **3.72 °C**.
+- First reported producer cooling greater than 1 °C: **65 / 45 years**.
+- Mean absolute temperature difference over active cells and report times: **0.414 °C**; maximum: **20.42 °C**.
+- Injector-column pressure: **42.174 / 32.223 MPa**; maximum final cell-pressure difference: **9.951 MPa**.
+- FEM water / energy balance errors: **1.0 × 10⁻⁷ / 8.3 × 10⁻⁹**. The reused FVM cache records an original maximum balance error of **7.3 × 10⁻¹²**, not separate water/energy errors.
+
+The producer-temperature difference exceeds the script's optional default 2 °C comparison limit;
+this figure is not a pass of that limit. The FEM run took **322.7 s** on the Mac with eight solver threads.
+The FVM cache records **107.3 s** for its original run; these are not a same-machine runtime benchmark.
+
+**Shared case**
+- Whole KGS model: 22 × 22 × 12 cells; 11 × 11 km and 60 m thick; 4656 active cells; unfaulted structural grid.
+- 0.05 m³/s of 30 °C water into an 80 °C reservoir; injector (6, 8), open layers 1–3; producer (8, 13), layers 2–4, held at 20 MPa.
+- No gravity; same water/rock constitutive model and 0.25-year maximum time step; FEM streamline-upwind stabilization factor 1.
+- Forty report times, every five years through year 200; the GIF includes its final-frame hold.
+
+Renderer: `scripts/make_fem_vs_fim_animation.py`. `--fvm-from-npz` reuses the original FVM heat cache
+and computes FEM only; `--save-fem-npz` and `--save-npz` retain the new results; `--from-npz` renders
+both columns without solving again. The earlier one-row FVM-only crop remains in
+`image/methods_compare_kansas.gif`, but is not this FVM-versus-FEM comparison.
+
+### Kansas FVM CO₂ into brine: no faults versus two branching faults
+
+**Purpose:** show how two branching, low-permeability faults change pressure build-up and CO₂ spreading for the same injection on the Kansas model, using the FIM-OBL solver under FVM.
+
+<p align="center"><img src="image/faulted_co2_kansas.gif" alt="Kansas FVM pressure and CO2 saturation: no faults above two branching no-throw faults" width="100%"></p>
+
+<sub>MacBook Pro (Apple M4 Pro, 48 GB), conda work, 8-thread cap · Kansas 22×22×12 · CO₂/brine, 0.008 m³/s, 100 yr · solver wall time: no faults 48.0 s; two faults 56.7 s; Δ(two − none) = +8.7 s. Same 5–200 MPa table, 261×201 points. Excludes common mesh setup, caching and rendering; one sequential run each, not a repeated benchmark.</sub>
+
+*The FVM results use the FIM-OBL solver. Both rows use the Kansas structural model with the same wells and CO₂-into-brine setup. The lower row adds two no-throw branching staircase barriers (main 3.75° SW; branch 4.67° NE soling into the main; multiplier 10⁻⁴). Pink/magenta surfaces in the faulted 3D views and matching section traces draw the approved gentle-dip planes smoothly, not the staircase faces. This shows pressure and saturation, not temperature. FEM is omitted because faulted multiphase FEM is not available.*
+
+**Highlights (no faults / two faults)**
+- Peak reported injector BHP: **21.272 / 43.215 MPa**; final producer-cell pressure: **12.239 / 12.388 MPa**.
+- CO₂ reaches the producer in both cases by year 100; maximum CO₂-rich saturation in the producer's open cells is
+  **0.726 / 0.655**. Reaching the producer is a result, not an acceptance criterion.
+- Component balance errors (CO₂ / water, relative to net transferred mass): **3.95×10⁻⁹ / 5.51×10⁻⁸** without faults
+  and **1.68×10⁻⁹ / 6.00×10⁻⁹** with faults; no property or linear-solver fallbacks in either run.
+- Pressure panels colour cell pressure above the 20 MPa initial pressure (shared 20–39.08 MPa `viridis_bright` scale,
+  0.02 MPa threshold; drawdown stays grey). No-fault cells stay below 20 MPa (at most 18.856 MPa), so that row shows
+  no pressure plume; its 21.272 MPa is the injector **well BHP**, not a cell pressure.
 
 **Key settings**
-- Whole KGS model: 22 × 22 × 12 cells, about 11 × 11 km and 60 m thick, at 80 °C.
-- 0.05 m³/s of 30 °C water for 200 years; injector and producer 2.7 km apart.
+- Whole KGS structural model: 22 × 22 × 12 cells of 500 × 500 × 5 m (11 × 11 km, 60 m thick), 4656 active cells;
+  KGS porosity, permeability and structural top unchanged; vertical exaggeration 40×.
+- Injector (5, 10), open in layers 8–11, 0.008 m³/s of CO₂; producer (9, 16), layers 1–3, 12 MPa BHP (zero-based
+  indices). 50 °C, 1 mol/kg brine; initial pressure 20 MPa; gravity on; 100 years, reported every two years.
+- Faults: no throw and no cut-plane mesh; a staircase transmissibility multiplier of 10⁻⁴ on 477 of 13,052
+  connections. The pink surfaces and section traces draw the geometric fault planes.
+- Constitutive tables: 5–200 MPa, 261 × 201 points, identical in both cases.
+- Camera: starts slightly from the SSE (`view_dir=(0.88, -0.60, 0.75)`) and turns 35° (`rotate_deg`) to an
+  almost-east view; `rotate=False` fixes it.
 
-Neither run includes gravity, and MODFLOW 6 keeps water properties constant. Details:
-`scripts/make_methods_animation.py`; a fast small version is in notebook 10.
+**Scientific notes**
+- The Spycher & Pruess (2005) CO₂–brine flash is valid to **60 MPa (600 bar)**; the wider 5–200 MPa table only keeps
+  the numerical iterations inside the tabulated range. At 0.02 m³/s the faulted case left the valid property range
+  (95,402 property fallbacks), so both cases share the lower rate of 0.008 m³/s.
+- The faulted 43.215 MPa injector BHP is well above a rough lithostatic estimate of ~25.46 MPa at the mean open depth
+  (~1.04 km, 2500 kg/m³ bulk density). That estimate is illustrative, not a site measurement or an operating limit.
+  The model has no fracture opening or geomechanics, so this result does not establish field feasibility.
 
-### Same solver, different fluids: water, gas and CO₂ on the Kansas model
+[Notebook 12](examples/12_multiphase_fluids.ipynb) exposes these as editable Python settings (`RATE_M3_S`,
+`P_RANGE_PA`, `TABLE_POINTS`, `YEARS`, `FAULT_MULTIPLIER`, wells and layers, `N_THREADS`, `VIEW_DIR`, `ROTATE`,
+`ROTATE_DEG`) and passes them to `run_comparison` in `scripts/make_faulted_co2_kansas.py`. The whole-Kansas solve is
+off by default (`RUN_FAULTED_COMPARISON = False`); separate `DEMO_*` settings drive the small notebook demos, and the
+script's `--from-npz` option re-renders from saved results without solving.
+
+### Same FVM solver, different fluids: water, gas and CO₂ on the Kansas model
 
 **Purpose:** show how three injected fluids (water into oil, gas into a black oil, carbon dioxide (CO₂) into brine)
-spread through the same reservoir with FIM-OBL.
+spread through the same reservoir with the FIM-OBL solver under FVM.
 
-<p align="center"><img src="image/fluids_compare_kansas.gif" alt="Water, gas and CO2 injection compared with FIM-OBL on the whole Kansas model" width="100%"></p>
+<p align="center"><img src="image/fluids_compare_kansas.gif" alt="Water, gas and CO2 injection compared with the same FVM FIM-OBL solver on the whole Kansas model" width="100%"></p>
+
+*All three runs use the FIM-OBL solver under FVM; labels were refreshed from the original frames without rerunning the simulations.*
 
 **Highlights**
 - CO₂ reaches the producer after 20 years and gas after 32 years.
@@ -225,7 +330,7 @@ or the temperature change is. Details: `scripts/kansas_fluids.py`; a fast small 
   thermo-hydro-mechanical/chemical (THM/C) processes in porous media. *Environmental Earth Sciences* 67.
   <https://doi.org/10.1007/s12665-012-1546-x>; <https://www.opengeosys.org>
 - MODFLOW 6 groundwater energy transport (GWE), USGS. <https://www.usgs.gov/software/modflow-6-usgs-modular-hydrologic-model>
-- IAPWS-IF97 water properties (used by FIM-OBL for water). <https://iapws.org/technical-guidance/release/IF97-Rev>
+- IAPWS-IF97 water properties (used by the FVM solver for water). <https://iapws.org/technical-guidance/release/IF97-Rev>
 
 **Linear solvers**
 - Saad, Y., Schultz, M. H. (1986). GMRES: a generalized minimal residual algorithm for solving nonsymmetric linear
@@ -270,7 +375,7 @@ or the temperature change is. Details: `scripts/kansas_fluids.py`; a fast small 
 
 ## Acknowledgements
 
-FIM-OBL is a finite-volume solver that follows the operator-based linearization published for
+The FIM-OBL solver implements FVM and follows the operator-based linearization published for
 [open-DARTS](https://gitlab.com/open-darts/open-darts) (Voskov 2017; Khait & Voskov 2017, 2018; latest release
 when accessed on 2026-11-01: 2.1.0). The `.vtu` mesh export writes the mesh format read by
 [OpenGeoSys](https://www.opengeosys.org) (latest release when accessed on 2026-11-01: 6.5.9). The CO₂ VE relative permeabilities and the flow diagnostics are derived from

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Larry Syu-Heng Lai
-//! Export of a flow grid to OpenGeoSys (OGS): a VTK unstructured-grid file
+//! Export of a flow grid to OpenGeoSys: a VTK unstructured-grid file
 //! (`.vtu`, ASCII XML) with hexahedral cells, shared (merged) nodes and the
-//! `MaterialIDs` cell array that OGS uses to pick media.
+//! `MaterialIDs` cell array that OpenGeoSys uses to pick media.
 //!
-//! Depth (positive down) becomes `z = -depth` (OGS is z up). Only active
+//! Depth (positive down) becomes `z = -depth` (OpenGeoSys is z up). Only active
 //! cells are written; `bulk_cell_id` maps them back to grid indices.
 //! Nodes closer than `merge_tol` are merged, so neighbours that share a face
 //! share nodes; displaced fault faces stay non-conforming (no node sharing).

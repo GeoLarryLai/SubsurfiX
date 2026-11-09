@@ -40,7 +40,7 @@ const STAGE_SECTIONS: [(&str, &str); 11] = [
     ("export", "export"),
 ];
 
-/// Engine version, e.g. `"0.0.2-dev"`.
+/// Rust-core version, e.g. `"0.0.2-dev"`.
 #[pyfunction]
 pub(crate) fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
@@ -183,7 +183,7 @@ pub(crate) fn nphi_shift(config_path: PathBuf) -> PyResult<(f64, &'static str)> 
     r.map_err(to_py_err)
 }
 
-/// Print engine log events at `level` (`error`, `warn`, `info`, `debug`,
+/// Print Rust-core log events at `level` (`error`, `warn`, `info`, `debug`,
 /// `trace`, any case) and above to stderr. Returns `True` if installed now,
 /// `False` if a subscriber already existed. Errors: `InvalidInputError` for
 /// another level.

@@ -24,7 +24,7 @@ def read_cornerpoint_grdecl(path: str | pathlib.Path) -> tuple[_native.CornerPoi
 def flow_model_from_grdecl(
     grid: _native.CornerPointGrid, props: dict[str, Any], perm_unit: str = "mD", fault_tol_m: float = 1e-3
 ) -> _native.FlowModel:
-    """Build a ``FlowModel`` (TPFA, fault overlap connections) from GRDECL
+    """Build a ``FlowModel`` (two-point flux approximation, fault-overlap connections) from GRDECL
     properties: PERMX (PERMY, PERMZ default to PERMX), PORO, optional NTG
     and MULT* keywords. ``perm_unit`` is ``"mD"`` (GRDECL convention) or ``"m2"``."""
     if perm_unit not in ("mD", "m2"):

@@ -10,8 +10,13 @@ HERE = Path(__file__).resolve().parent
 BLOCK = [
 """md:# 09 · MODFLOW 6 flow bridge (experimental)
 
+> The in-package alternatives are an open-DARTS-inspired FIM-OBL solver and a MODFLOW-inspired control-volume finite-difference solver translated into Rust. Neither is the official USGS MODFLOW 6 program. FEM supports experimental coupled water pressure and temperature; full multiphase runs remain FVM-only. Explicit `mf6`/FloPy runs are separate official-program external checks.
+
+
+> Both sides here are in the FVM family. MODFLOW 6 is the USGS solver using a control-volume finite-difference scheme; the SubsurfiX pressure routine below is not FEM. The featured README Kansas animation now shows a 2×2 FVM-versus-FEM thermal-water comparison: pressure above temperature, FVM left and FEM right. The FVM results use the FIM-OBL solver; FEM uses the OpenGeoSys-style continuous Galerkin finite-element solver. This comparison shows water-injection pressure and temperature, not saturation.
+
 Export a SubsurfiX property grid to a [MODFLOW 6](https://doi.org/10.3133/tm6A55) groundwater-flow (GWF) model with
-[FloPy](https://doi.org/10.1111/gwat.13259), run it, and compare with the SubsurfiX finite-volume pressure solver.
+[FloPy](https://doi.org/10.1111/gwat.13259), run it, and compare with the SubsurfiX finite-volume method (FVM) pressure solver.
 
 Conversions in `subsurfix.modflow` (SI units): hydraulic conductivity K = k·ρg/μ, specific storage
 Ss = ρg(c_rock + φ·c_w), well connection conductance C = WI·ρg/μ with Peaceman well indices
@@ -94,7 +99,7 @@ ax.semilogx(rt["times"] / 86400, rt["p"][:, inj].mean(axis=1) / 1e6, "o-", label
 ax.axhline(p_ssx[inj].mean() / 1e6, color="k", ls="--", label="SubsurfiX steady")
 ax.set_xlabel("days"); ax.set_ylabel("pressure (MPa)"); ax.legend(fontsize=8); save(fig, "09_mf6_transient.png")""",
 """md:## Agreement and differences
-* Both codes use two-point flux with harmonic-mean face conductances on a regular grid, so the steady pressure fields
+* Both codes use a two-point flux approximation with harmonic-mean face conductances on a regular grid, so the steady pressure fields
   should agree to solver tolerance; the printed difference above is the check.
 * MODFLOW 6 solves for hydraulic head with constant density. The bridge maps p = ρg·h, which matches
   SubsurfiX's gravity-free `solve_pressure`. Two-phase flow, capillary pressure and gravity segregation

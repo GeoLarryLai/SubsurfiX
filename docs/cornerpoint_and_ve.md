@@ -1,6 +1,19 @@
 # Faulted corner-point grids and CO₂ vertical equilibrium
 
-Status: corner-point TPFA is part of the flow model. The CO₂ vertical-equilibrium (VE) model is **experimental**.
+The two in-package FVM solvers are the open-DARTS-inspired FIM-OBL solver and the
+MODFLOW-inspired control-volume finite-difference solver (Rust translation). The latter is not the
+official USGS MODFLOW 6 program. Where an example explicitly invokes `mf6` through FloPy, that is
+an outside check with official USGS MODFLOW 6. FEM uses the OpenGeoSys-style continuous Galerkin
+finite-element solver, including experimental coupled water pressure and temperature; complete
+multiphase simulation remains FVM-only.
+
+
+Corner-point grid and bulk mesh describe geometry, not competing solvers. FVM and FEM are spatial
+methods. The fully implicit 3D FVM runs use the SubsurfiX FIM-OBL solver (open-DARTS inspired).
+MODFLOW 6 is a different FVM-family solver using control-volume finite differences. FEM here uses
+a continuous Galerkin finite-element solver (OpenGeoSys-style), with its documented interface limits.
+
+Status: FVM with a two-point flux approximation on a corner-point grid is part of the flow model. The CO₂ vertical-equilibrium (VE) model is **experimental**.
 Example: `examples/13_cornerpoint_and_co2_ve.ipynb`.
 
 ## 1. Corner-point grids with faults
@@ -8,9 +21,9 @@ Example: `examples/13_cornerpoint_and_co2_ve.ipynb`.
 **Input.** `sx.read_cornerpoint_grdecl(path)` reads `SPECGRID`/`DIMENS`, `COORD`, `ZCORN`, `ACTNUM` and per-cell
 arrays such as `PERMX/Y/Z`, `PORO`, `NTG` and `MULTX/Y/Z`. `sx.flow_model_from_grdecl(grid, props)` builds a
 `FlowModel`, with permeability in mD by default. `sx.transmissibilities(model)` returns the connection list
-`(a, b, T)`, and the model runs with any FIM driver (`run_fim_water_oil`, `run_fim_black_oil`, ...).
+`(a, b, T)`, and the model runs with the fully implicit FVM drivers (`run_fim_water_oil`, `run_fim_black_oil`, ...).
 
-**Transmissibility.** TPFA half-transmissibilities are combined harmonically,
+**Transmissibility.** Two-point flux approximation half-transmissibilities are combined harmonically,
 T_i = A (K_i n·d_i)/|d_i|², T = mult / (1/T_a + 1/T_b),
 where A is the face area vector and d_i runs from the cell centre to the face centre. Permeability is diagonal in
 the cell axes, and NTG scales the horizontal components. When the corners on the two sides of a face do not match
@@ -21,9 +34,9 @@ cells across the fault are connected by non-neighbour connections. Collapsed (pi
 
 | Check | Result |
 |---|---|
-| Unfaulted corner-point vs Cartesian TPFA (20 connections) | max relative difference 3.3e-16 |
+| Unfaulted corner-point vs Cartesian two-point flux approximation (20 connections) | max relative difference 3.3e-16 |
 | 3 m throw, hand-computed overlap transmissibility | equal to 1e-12 |
-| Faulted water–oil FIM, mass balance | 46 steps, 0 cuts, worst 5.3e-10; water crosses the fault (Sw 0.746) |
+| Faulted water–oil FVM, mass balance | 46 steps, 0 cuts, worst 5.3e-10; water crosses the fault (Sw 0.746) |
 | GRDECL write/read round trip | identical connections |
 
 **Not implemented:** `MINPV`/`PINCH` processing, `MAPAXES`, fault-rock (`FAULTS`/`MULTFLT`) keywords, and the exact
@@ -47,12 +60,12 @@ Phase potentials at the caprock:
 - Φ_g = p − ρ_c g z_t
 - Φ_w = p − ρ_w g z_t − Δρ g h
 
-The pressure equation ∇·(K H (λ_g∇Φ_g + λ_w∇Φ_w)) = q is solved implicitly with a Jacobi-preconditioned CG,
+The pressure equation ∇·(K H (λ_g∇Φ_g + λ_w∇Φ_w)) = q is solved implicitly with a Jacobi-preconditioned conjugate gradient linear solver,
 using the two-point column transmissibility of the top surface. The CO₂ volume per column,
 
 V = A φ [(1 − s_wr) h + s_gr (h_max − h)],
 
-is then advanced explicitly with phase-upwind fluxes under a CFL limit (IMPES). The conserved variable is V, and
+is then advanced explicitly with phase-upwind fluxes under a Courant time-step limit (implicit pressure and explicit transport). The conserved variable is V, and
 h and h_max are recovered from it, so mass is conserved to round-off. Open edges are held hydrostatic and
 CO₂ that leaves through them is counted as *exited*. Fluid properties are constant during a run. By default
 they come from the CO₂–brine module at (p_fluid, t_fluid) through `ve_fluid_properties`.
@@ -85,12 +98,12 @@ stays below 2e-13.
 - Not compared against MRST-co2lab output, because no Octave/MATLAB run was available. Checked against
   analytic solutions only.
 
-## FIM-OBL and VE on the same case
+## FVM and VE on the same case
 
-Example 13 also runs the full 3D solver (FIM-OBL, `run_fim_co2_brine`) on the same faulted grid and injection, for
+Example 13 also runs the full 3D FVM solver (`run_fim_co2_brine`; the FIM-OBL solver, using the fully implicit method with operator-based linearization) on the same faulted grid and injection, for
 the 10 injection years, and compares plume footprint, farthest plume edge, CO₂ mass, mass balance and run time with
-VE. VE runs in seconds on map columns; FIM-OBL solves every 3D cell (minutes) and includes CO₂ dissolution and
-pressure. The FIM run has no shut-in schedule, so the comparison stops at the end of injection.
+VE. VE runs in seconds on map columns; FVM solves every 3D cell (minutes) and includes CO₂ dissolution and
+pressure. The FVM run has no shut-in schedule, so the comparison stops at the end of injection.
 
 ## References
 

@@ -1,4 +1,4 @@
-"""Side-by-side GIF: MODFLOW 6 (GWF + GWE) and SubsurfiX FIM-OBL water + heat on the layered block model.
+"""Side-by-side FVM against USGS MODFLOW 6 external-check GIF on the layered block model.
 
 Cold water (30 degC) is injected at 0.02 m3/s into an 80 degC reservoir for 30 years (injector at column (5, 5),
 producer at (2, 2) held at 20 MPa, both open in all 12 layers; thermal settings of example 06). MODFLOW 6 solves

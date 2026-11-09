@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 class SubsurfixError(Exception):
-    """Every fallible engine function returns this error."""
+    """Every fallible Rust-core function returns this error."""
 
 
 class InvalidInputError(SubsurfixError, ValueError):

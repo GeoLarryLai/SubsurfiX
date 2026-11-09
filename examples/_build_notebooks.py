@@ -305,7 +305,7 @@ print(f"porosity mean {real[0].mean():.3f}, clean share {fac[0].mean():.2f}")"""
 books["05_water_injection.ipynb"] = [
 """md:# 05 · Water injection
 
-Two-phase water–oil flow on the property model of notebook 04, with the SubsurfiX finite-volume solver:
+Two-phase water–oil flow on the property model of notebook 04, with the SubsurfiX finite-volume method (FVM) solver:
 two-point flux approximation, implicit pressure and explicit saturation, gravity, Brooks–Corey capillary
 pressure ([Brooks & Corey 1966](https://doi.org/10.1061/JRCEA4.0000425)) and Peaceman well indices
 ([Peaceman 1978](https://doi.org/10.2118/6893-PA)). One vertical injector, one deviated producer.

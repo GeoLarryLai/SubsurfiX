@@ -49,7 +49,7 @@ __version__: str = _native.version()
 
 
 def enable_logging(level: str = "info") -> bool:
-    """Print engine log events at ``level`` (``error``, ``warn``, ``info``, ``debug``, ``trace``) to stderr.
+    """Print Rust-core log events at ``level`` (``error``, ``warn``, ``info``, ``debug``, ``trace``) to stderr.
 
     Returns ``True`` if installed now, ``False`` if logging was already set up.
     Raises ``InvalidInputError`` for another level. Never called on import.

@@ -23,7 +23,7 @@ d["F"], d["Phi"], d["lorenz"], d["Ev"], d["tD"]  # F–Φ curve, Lorenz coeffici
   `sx.diagnostics.f_phi`, `sx.diagnostics.lorenz_coefficient` and `sx.diagnostics.sweep_efficiency` take arrays.
 - The mobility can be single phase (1/μ), or the frozen total mobility of a multiphase state:
   `sx.diagnostics.total_mobility(sw, corey)` uses the same Corey curves and defaults as the solvers. This gives
-  diagnostics on fully implicit (FIM) total fluxes, recomputed by a pressure solve at fixed λt.
+  diagnostics on fully implicit FVM total fluxes, recomputed by a pressure solve at fixed λt.
 - The flux field can come from Cartesian or corner-point models. Fault-overlap connections are handled like any
   other connection.
 

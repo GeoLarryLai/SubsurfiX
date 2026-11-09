@@ -9,11 +9,13 @@ HERE = Path(__file__).resolve().parent
 cells = [
 """md:# 13 · Faulted corner-point grid and CO2 vertical-equilibrium migration
 
+> Terminology note: the finite-volume method (FVM) is the method label. Saved outputs were relabelled from the original results; no simulation was rerun.
+
 A small synthetic faulted block, built in code (no external data), used two ways:
 
-1. **3D corner-point flow.** The grid is a corner-point (GRDECL-layout) block with a normal fault. Two-point flux
-   (TPFA) transmissibilities connect the cells across the fault by their overlapping face areas
-   (non-neighbour connections). A fully implicit (FIM) water injection then runs from the upthrown block across
+1. **3D corner-point flow.** The grid is a corner-point (GRDECL-layout) block with a normal fault. Two-point flux approximation
+   transmissibilities connect the cells across the fault by their overlapping face areas
+   (non-neighbour connections). A fully implicit FVM water injection then runs from the upthrown block across
    the fault to a producer in the downthrown block.
 2. **2D CO2 vertical equilibrium (VE).** The top surface of the same grid becomes a 2D VE grid. CO2 is injected
    into the downthrown block and migrates up the caprock. The run reports structural (spill-point) trapping,
@@ -29,7 +31,7 @@ solvers run in this notebook.
 - Grid: 40 × 24 × 6 cells of 25 × 25 m with 4 m layers. The caprock dips 2 % to the east (+x) and has a dome on the
   upthrown (west) block. A north–south normal fault at x = 500 m throws the east block down 10 m.
 - Layers: alternating 200 / 50 mD sand with porosity 0.24 / 0.18, and kv/kh = 0.1.
-- FIM run: water–oil, gravity on. The injector is at (5, 12) and the producer at (34, 12), both open in all layers.
+- FVM run: water–oil, gravity on. The injector is at (5, 12) and the producer at (34, 12), both open in all layers.
   Injection is 10 L/s for 5 years, and the producer holds 20 MPa bottom-hole pressure.
 - VE run: CO2 and brine properties come from the CO2–brine module at 10 MPa and 40 °C, with s_wr = 0.1 and
   s_gr = 0.2. The open edges are hydrostatic. CO2 is injected at 1 kg/s for 10 years at (30, 12), and migration is
@@ -108,7 +110,7 @@ pl.add_mesh(ug, scalars="perm (mD)", show_edges=True, edge_color="#555555", line
 pl.camera_position = [(-700, -1100, 900), (500, 300, -40), (0, 0, 1)]
 pl.screenshot(OUT / "nb13_faulted_block.png"); pl.close()
 display(Image(filename=str(OUT / "nb13_faulted_block.png"), width=750))""",
-"""md:## FIM water injection across the fault
+"""md:## FVM water injection across the fault
 This is a dead-oil water–oil run on the corner-point connection list. The injector is in the upthrown block and
 the producer is in the downthrown block, so all the water reaching the producer crosses the fault through the
 overlap connections.""",
@@ -199,14 +201,14 @@ ax.stackplot(yrs, inv[:, 3], inv[:, 2], inv[:, 4], inv[:, 5],
 ax.plot(yrs, inv[:, 0], "k--", label="injected")
 ax.set_xlabel("years"); ax.set_ylabel("CO2 (Mt)"); ax.legend(fontsize=8, loc="lower right"); ax.set_title("Trapping inventory")
 fig.savefig(OUT / "nb13_ve_inventory.png", bbox_inches="tight")""",
-"""md:## Same CO2 case with the full 3D solver (FIM-OBL) and VE
+"""md:## Same CO2 case with full 3D FVM and VE
 Both methods answer "where does the injected CO2 go?", at very different cost. VE treats the reservoir as one
-thin layer under the caprock and moves only the plume thickness; the fully implicit solver (FIM-OBL, the default
-SubsurfiX solver) solves pressure and composition in every 3D cell, including CO2 dissolving into brine.
+thin layer under the caprock and moves only the plume thickness; the FVM solver (FIM-OBL: fully implicit method with operator-based
+linearization, the default SubsurfiX solver) solves pressure and composition in every 3D cell, including CO2 dissolving into brine.
 
 Here both inject CO2 at 1 kg/s at column (30, 12) on the same faulted corner-point grid, and both are compared
-over the 10 injection years only (the FIM run has no well shut-in schedule, so it is not continued into the
-migration period). Setup of the FIM run: CO2–brine at 40 °C without salt, gravity on, hydrostatic start
+over the 10 injection years only (the FVM run has no well shut-in schedule, so it is not continued into the
+migration period). Setup of the FVM run: CO2–brine at 40 °C without salt, gravity on, hydrostatic start
 pressure (10 MPa at the shallowest cell centre), and four brine producers in the corner columns held at their
 starting pressure, standing in for VE's open hydrostatic edges.""",
 """zc = np.asarray(grid2.centers())[:, 2]
@@ -235,7 +237,7 @@ co2_fim = (mip[-1, 0] - mip[0, 0]) / 1e9
 bal_fim = np.abs((mip[1:] - mip[0]) - mni[1:]).max() / np.abs(mni[1:]).max()
 inv10 = np.asarray(ve10["inventory"])[-1] / 1e9
 names = ve10["inventory_names"]
-rows = ["| Quantity at 10 years | VE | FIM-OBL |", "|---|---|---|",
+rows = ["| Quantity at 10 years | VE | FVM |", "|---|---|---|",
         f"| Cells solved | {vg.n_cells} columns | {n} cells |",
         f"| Run time | {ve10_rt:.2f} s | {fco_rt:.1f} s |",
         f"| Plume footprint (map area with CO2) | {foot_ve.sum() * D * D / 1e4:.1f} ha | {foot_fim.sum() * D * D / 1e4:.1f} ha |",
@@ -248,22 +250,22 @@ fig, ax = plt.subplots(1, 2, figsize=(11, 3.4), sharey=True)
 ax[0].pcolormesh(xs, ys, np.ma.masked_less(hmap.reshape(NY, NX), 0.01), cmap="magma_r", vmin=0, vmax=max(hmap.max(), 1))
 ax[0].set_title("VE: plume thickness (m), 10 yr")
 im = ax[1].pcolormesh(xs, ys, np.ma.masked_less(sg.max(axis=0), 0.01), cmap="viridis", vmin=0, vmax=0.8)
-ax[1].set_title("FIM-OBL: highest CO2 saturation in each column, 10 yr"); fig.colorbar(im, ax=ax[1])
+ax[1].set_title("FVM: highest CO2 saturation in each column, 10 yr"); fig.colorbar(im, ax=ax[1])
 for a in ax:
     a.axvline(FAULT_I * D, color="k", ls="--", lw=0.8); a.plot(30.5 * D, 12.5 * D, "w^", mec="k"); a.set_aspect("equal")
     a.set_xlabel("x (m)")
 ax[0].set_ylabel("y (m)")
 fig.savefig(OUT / "nb13_ve_vs_fim.png", bbox_inches="tight")""",
 """md:**Reading the comparison.** The table and maps above are measured, not tuned. Both mass-balance errors are relative
-to the CO2 injected (kg against kg). The FIM-OBL maximum CO2 saturation of 1.00 is most likely dry-out next to
+to the CO2 injected (kg against kg). The FVM maximum CO2 saturation of 1.00 is most likely dry-out next to
 the injector: dry CO2 keeps flowing through those cells and evaporates the remaining brine (water dissolves into
 the CO2 phase), so the brine saturation can drop below its residual value of 0.1. VE has no evaporation and keeps
 the residual brine. (Not checked cell by cell.) VE is much faster because it
-solves one value per map column with explicit steps; FIM-OBL solves every 3D cell and also lets CO2 dissolve
+solves one value per map column with explicit steps; FVM solves every 3D cell and also lets CO2 dissolve
 into the brine, so it holds part of the CO2 out of the free plume. Use VE to screen where stored CO2 goes over
-decades and how much is trapped; use FIM-OBL when the 3D layering, dissolution or pressure matter.
+decades and how much is trapped; use FVM when the 3D layering, dissolution or pressure matter.
 In this run VE's plume covers more map area (55 vs 39 ha) because it spreads as a thin layer under the
-caprock, and more of VE's CO2 leaves through its open edges (0.116 Mt) than FIM-OBL's producers remove.""",
+caprock, and more of VE's CO2 leaves through its open edges (0.116 Mt) than FVM's producers remove.""",
 """md:## Iterative versus direct linear solver
 Each Newton step of the fully implicit solver solves one large sparse linear system. By default this is done
 iteratively: GMRES with a two-stage CPR preconditioner (an algebraic multigrid solve on the cell pressures, then
@@ -271,7 +273,7 @@ an ILU(0) sweep on all unknowns). The alternative, `linear_solver="direct"`, fac
 sparse LU. If GMRES ever fails to converge, that Newton step falls back to the direct LU automatically and the
 run reports it in `n_linear_fallbacks`.
 
-Both solvers solve the same equations to a tight tolerance (relative residual 1e-8), so the answers should agree
+Both linear solvers solve the same equations to a tight tolerance (relative residual 1e-8), so the answers should agree
 to round-off and the time-step history should be identical. The cell below re-runs the corner-point water–oil run and the CO2 run with the direct
 solver and compares them with the iterative runs above.""",
 """def compare(a, b):
@@ -295,8 +297,8 @@ for name, a, b, ta, tb in (("water–oil", fim, fim_d, fim_rt, fim_d_rt), ("CO2�
     rows.append(f"| {name} | {ta:.1f} s | {tb:.1f} s | {a['n_linear_iterations']} | {a['n_linear_fallbacks']} | "
                 f"{'yes' if same else 'no'} | {dp:.1e} | {ds:.1e} |")
 display(Markdown("\\n".join(rows)))""",
-"""md:The two solvers agree to round-off on both runs and take the same time steps, so every figure in this
-notebook is the same whichever solver is used. The iterative solver is faster on these corner-point grids.""",
+"""md:The two linear solvers agree to round-off on both runs and take the same time steps, so every figure in this
+notebook is the same whichever linear solver is used. The iterative solver is faster on these corner-point grids.""",
 """md:## Limitations
 - Faults in the 3D model are geometric overlaps only. There are no fault-rock transmissibility multipliers unless
   `MULT*` arrays are given, and no MRST exact face splitting, `MINPV`/`PINCH` or `MAPAXES`.
@@ -305,7 +307,7 @@ notebook is the same whichever solver is used. The iterative solver is faster on
 - VE physics is a sharp interface with constant (incompressible) densities and viscosities, with no capillary
   fringe, no CO2 dissolution or convective mixing, and no caprock rugosity. Residual trapping uses a single s_gr
   without hysteresis curves.
-- Explicit (IMPES) time stepping is limited by a CFL condition, so long migrations on fine grids need many
+- Explicit transport with implicit pressure is limited by a CFL condition, so long migrations on fine grids need many
   steps.
 - Experimental: checked against analytic solutions (see docs), not run against MRST-co2lab on this model.""",
 ]

@@ -10,8 +10,12 @@ HERE = Path(__file__).resolve().parent
 cells = [
 """md:# 10 · Heat doublet in MODFLOW 6 (GWE), checked against SubsurfiX
 
-The doublet of the README animation (30 °C water injected into an 80 °C reservoir for 30 years, on a small
-layered block model) run in
+> The in-package alternatives are an open-DARTS-inspired FIM-OBL solver and a MODFLOW-inspired control-volume finite-difference solver translated into Rust. Neither is the official USGS MODFLOW 6 program. FEM supports experimental coupled water pressure and temperature; full multiphase runs remain FVM-only. Explicit `mf6`/FloPy runs are separate official-program external checks.
+
+
+> This notebook compares two FVM-family implementations: MODFLOW 6 (the USGS control-volume finite-difference code) and the existing split SubsurfiX `run_heat` routine. It does not run FIM-OBL or FEM. The featured README Kansas GIF shows a 2×2 FVM-versus-FEM thermal-water comparison, not MODFLOW or saturation panels. The FVM results use the FIM-OBL solver; FEM uses the OpenGeoSys-style continuous Galerkin finite-element solver. This comparison shows water-injection pressure and temperature, not saturation.
+
+A small layered-block heat doublet (30 °C water injected into an 80 °C reservoir for 30 years) run in
 SubsurfiX (`run_heat`) and again in MODFLOW 6 with its groundwater-energy model, GWE
 ([Langevin et al. 2024](https://doi.org/10.5066/P9FL1JCC)), through FloPy
 ([Bakker et al. 2016](https://doi.org/10.1111/gwat.12413)). `subsurfix.modflow_heat` (experimental) converts the
@@ -70,7 +74,7 @@ for ax, T, lab in zip(axs[1:], (T_sx, T_mf), ("SubsurfiX", "MODFLOW 6")):
     ax.set_title(f"{lab}, 15 yr, layer {lay} (black: SubsurfiX 55 degC)", fontsize=9)
 fig.colorbar(im, ax=axs[1:], shrink=0.85, label="degC"); save(fig, "10_modflow_heat.png")""",
 """md:## Agreement
-Both codes use a cell-centred finite-volume grid with two-point flow, upwind advection and implicit time steps,
+Both codes use a cell-centred finite-volume method (FVM) with a two-point flux approximation, upwind advection and implicit time steps,
 and here the same Peaceman well indices, so they solve nearly the same discrete equations; the printed differences
 are the check. Remaining differences come from the well models (SubsurfiX's BHP well versus MODFLOW's multi-aquifer
 well), solver tolerances and time-step control. GWE dispersion is off to match `run_heat`.""",

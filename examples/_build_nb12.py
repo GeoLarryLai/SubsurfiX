@@ -1,15 +1,20 @@
 """Generate examples/12_multiphase_fluids.ipynb (run: python examples/_build_nb12.py)."""
 
 from pathlib import Path
+import hashlib
 
 import nbformat as nbf
 
 HERE = Path(__file__).resolve().parent
 
 cells = [
-"""md:# 12 · Multiphase fluids with the fully implicit OBL solver
+"""md:# 12 · Multiphase fluids with FVM
 
-Four fully implicit (FIM) runs on the same small layered block model used by the 3D doublet animation in the
+> The fluid comparison uses one FVM solver, FIM-OBL (open-DARTS inspired), with different fluids. MODFLOW 6 is another FVM-family solver using control-volume finite differences; it is neither FIM-OBL nor FEM. FEM here is the continuous Galerkin finite-element solver (OpenGeoSys-style), with the physics limitations documented below.
+
+> Terminology note: the finite-volume method (FVM) is the method label; the FIM-OBL solver uses the fully implicit method with operator-based linearization.
+
+Four fully implicit FVM runs on the same small layered block model used by the 3D doublet animation in the
 README (`block_model.py` next to this notebook; no external data):
 
 1. dead-oil water injection (water–oil),
@@ -17,10 +22,11 @@ README (`block_model.py` next to this notebook; no external data):
 3. CO2 injection into brine (CO2–brine, isothermal, 50 °C, 1 mol/kg NaCl),
 4. cold CO2 injection, 25 °C CO2 into a 60 °C aquifer (CO2–brine with the energy equation).
 
-The solver uses operator-based linearization (OBL; Voskov 2017, *J. Comput. Phys.* 337; Khait & Voskov 2017,
-*J. Pet. Sci. Eng.* 157), two-point flux finite volumes, Newton on all unknowns, and Peaceman wells
+The FVM solver is the FIM-OBL solver: fully implicit method with operator-based linearization
+(Voskov 2017, *J. Comput. Phys.* 337; Khait & Voskov 2017,
+*J. Pet. Sci. Eng.* 157). It uses the two-point flux approximation, Newton on all unknowns, and Peaceman wells
 (Peaceman 1983, *SPE J.* 23(3)). CO2 solubility is from Spycher & Pruess 2005 (*Geochim. Cosmochim. Acta* 69(13)).
-Method notes: `docs/multiphase_fim.md`. Every number and figure below comes from the compiled solver run in this notebook.
+Method notes: `docs/multiphase_fim.md`. The run cells compute results with the compiled solver; the optional whole-model comparison is off by default.
 
 **Setup, common to all four cases**
 
@@ -31,7 +37,7 @@ Method notes: `docs/multiphase_fim.md`. Every number and figure below comes from
 - Wells: injector INJ at column (i, j) = (5, 5) and producer PROD at (2, 2), both open in all 12 layers
   (Peaceman well index, radius 0.1 m).
 - Injection: 0.008 m³/s at reservoir conditions for 40 years; results reported every 2 years.
-- Solver: fully implicit Newton with operator-based linearization (OBL). **Experimental**: not validated against
+- FVM solver: fully implicit Newton with operator-based linearization. **Experimental**: not validated against
   open-DARTS on this grid.""",
 """md:## Setup""",
 """import os, time
@@ -63,8 +69,8 @@ PV = model.pore_volume()
 def wells(q_inj, bhp_prod):
     return column_wells(bm, INJ, PROD, rate=q_inj, bhp=bhp_prod)
 YR = 3.15576e7
-TIMES = [0.0] + [y * YR for y in range(2, 41, 2)]
-YEARS = np.array(TIMES) / YR
+TIMES = demo_report_times(DEMO_YEARS, DEMO_REPORT_INTERVAL_YEARS)
+DEMO_REPORT_YEARS = np.array(TIMES) / YR
 G = 9.80665
 print(f"{N} cells, cell {cell[0]:.0f} x {cell[1]:.0f} x {cell[2]:.1f} m, pore volume {PV.sum():.3e} m3")
 print(f"median k {np.median(k_md):.1f} mD (range {k_md.min():.2f}-{k_md.max():.0f}), porosity {phi.min():.3f}-{phi.max():.3f}")
@@ -74,11 +80,14 @@ display(Markdown(
     f"| Cell size | {cell[0]:.0f} × {cell[1]:.0f} × {cell[2]:.1f} m |\\n"
     f"| Pore volume | {PV.sum():.3e} m³ |\\n"
     f"| Median permeability | {np.median(k_md):.1f} mD |\\n"
-    f"| Injection | 0.008 m³/s for {YEARS[-1]:.0f} years = {0.008 * TIMES[-1] / PV.sum() * 100:.1f} % of the pore volume |\\n"
-    f"| Report times | every {YEARS[1]:.0f} years |"))""",
-"""md:Injection rates are reservoir volume rates. With unit permeabilities of 0.5–80 mD and 500 m cells, 0.008 m³/s
-(about 690 m³/day) keeps the injector pressure inside the OBL table range (5–50 MPa). Over 40 years that is
-about 5 % of the block pore volume (see the setup table), so the injected phase stays within a few cells of INJ.""",
+    f"| Injection | {DEMO_RATE_M3_S:g} m³/s for {DEMO_REPORT_YEARS[-1]:.0f} years = {DEMO_RATE_M3_S * TIMES[-1] / PV.sum() * 100:.1f} % of the pore volume |\\n"
+    f"| Report times | every {DEMO_REPORT_YEARS[1]:.0f} years |"))""",
+"""md:Injection rates are reservoir volume rates. `DEMO_RATE_M3_S` defaults to 0.008 m³/s
+(about 690 m³/day), with `DEMO_YEARS = 40` and reports every two years for both small models.
+The setup table computes the injected pore-volume fraction from these editable settings.
+Isothermal CO₂/brine uses `DEMO_P_RANGE_PA` / `DEMO_TABLE_POINTS` (defaults 5–200 MPa,
+261 × 201 points); the other fluid systems retain their separate tables. A table bound is
+not a property-validity guarantee: inspect the reported pressure and fallback count.""",
 """md:## Case 1 · Dead-oil water injection
 Water (1000 kg/m³, 1 mPa·s) displaces dead oil (850 kg/m³, 2 mPa·s), Corey relative permeability, gravity on.
 Initial water saturation 0.2, pressure 20 MPa. Producer at 12 MPa bottom-hole pressure.
@@ -88,7 +97,7 @@ pressure rising until the injected volume is balanced by production.""",
 """runs, RUNTIME = {}, {}
 t = time.time()
 runs["water-oil"] = nat.run_fim_water_oil(
-    model, wells(0.008, 1.2e7), np.full(N, 0.2), np.full(N, 2e7), TIMES,
+    model, wells(DEMO_RATE_M3_S, 1.2e7), np.full(N, 0.2), np.full(N, 2e7), TIMES,
     corey={"mu_o": 2e-3}, physics={"gravity": G, "rho_o": 850.0, "c_w": 4e-10, "c_o": 1e-9},
     p_range=(5e6, 5e7), table_points=(31, 201), dt_init=86400.0, dt_max=0.25 * YR)
 RUNTIME["water-oil"] = time.time() - t
@@ -113,7 +122,7 @@ zo0 = oil_mass / (1 + rs_mass) / (oil_mass + water_mass)
 zg0 = 0.999 * zo0 * rs_mass                                    # just below saturation: no free gas at t = 0
 t = time.time()
 runs["oil-gas"] = nat.run_fim_black_oil(
-    model, wells(0.008, 1.0e7), np.full(N, p0), np.full(N, zg0), np.full(N, zo0), TIMES,
+    model, wells(DEMO_RATE_M3_S, 1.0e7), np.full(N, p0), np.full(N, zg0), np.full(N, zo0), TIMES,
     pvt=pvt, bw=1.01, gravity=G, injection=[(1.0, 0.0), (0.0, 0.0)],
     p_range=(5e6, 3e7), table_points=(51, 101, 101), dt_init=86400.0, dt_max=0.25 * YR)
 RUNTIME["oil-gas"] = time.time() - t
@@ -127,8 +136,8 @@ What to look for: a free CO2 plume rising under gravity towards the top layers, 
 at its edge, and the time when CO2 first reaches PROD.""",
 """t = time.time()
 runs["CO2-brine"] = nat.run_fim_co2_brine(
-    model, wells(0.008, 1.2e7), np.full(N, 2e7), np.zeros(N), TIMES,
-    temperature=323.15, m_nacl=1.0, gravity=G, p_range=(5e6, 5e7), table_points=[61, 201],
+    model, wells(DEMO_RATE_M3_S, 1.2e7), np.full(N, 2e7), np.zeros(N), TIMES,
+    temperature=323.15, m_nacl=1.0, gravity=G, p_range=DEMO_P_RANGE_PA, table_points=DEMO_TABLE_POINTS,
     dt_init=86400.0, dt_max=0.25 * YR)
 RUNTIME["CO2-brine"] = time.time() - t
 print(f"CO2-brine: {RUNTIME['CO2-brine']:.0f} s, property fallbacks: {runs['CO2-brine']['n_fallbacks']}")""",
@@ -140,7 +149,7 @@ What to look for: a cooled zone around INJ that lags behind the CO2 front (rock 
 balance row in the statistics below.""",
 """t = time.time()
 runs["CO2-brine cold"] = nat.run_fim_co2_brine(
-    model, wells(0.008, 1.2e7), np.full(N, 2e7), np.zeros(N), TIMES,
+    model, wells(DEMO_RATE_M3_S, 1.2e7), np.full(N, 2e7), np.zeros(N), TIMES,
     m_nacl=1.0, thermal=True, t0=np.full(N, 333.15), injection_temperature=[298.15, 333.15],
     gravity=G, p_range=(5e6, 5e7), t_range=(290.0, 340.0), table_points=[31, 101, 26],
     dt_init=86400.0, dt_max=0.25 * YR)
@@ -166,7 +175,7 @@ for name, r in runs.items():
 for a, (name, err) in zip(ax, bal.items()):
     comps = comp_names(runs[name], err.shape[1])
     for i, c in enumerate(comps):
-        a.semilogy(YEARS[1:], np.abs(err[1:, i]) + 1e-18, "o-", ms=3, label=c)
+        a.semilogy(DEMO_REPORT_YEARS[1:], np.abs(err[1:, i]) + 1e-18, "o-", ms=3, label=c)
     a.set_title(name); a.set_xlabel("years"); a.legend(fontsize=8)
 ax[0].set_ylabel("relative balance error")
 save(fig, "fim12_mass_balance.png")""",
@@ -190,10 +199,10 @@ save(fig, "fim12_saturation_maps.png")""",
 """fig, ax = plt.subplots(1, 2, figsize=(9, 3.2))
 Tc = np.asarray(runs["CO2-brine cold"]["temperature"])[-1].reshape(NZ, NY, NX) - 273.15
 im = ax[0].imshow(Tc[0], origin="lower", extent=ext_xy, cmap="coolwarm"); fig.colorbar(im, ax=ax[0], label="°C")
-ax[0].set_title("cold CO2: temperature, top layer, 40 yr"); ax[0].set_xlabel("x (km)"); ax[0].set_ylabel("y (km)")
+ax[0].set_title(f"cold CO2: temperature, top layer, {DEMO_YEARS:g} yr"); ax[0].set_xlabel("x (km)"); ax[0].set_ylabel("y (km)")
 im = ax[1].imshow(Tc[:, INJ[1], :], extent=ext_xz, cmap="coolwarm", aspect="auto"); fig.colorbar(im, ax=ax[1], label="°C")
 ax[1].set_title(f"temperature, section j = {INJ[1]}"); ax[1].set_xlabel("x (km)"); ax[1].set_ylabel("depth (m)")
-print(f"cold CO2 case: minimum temperature {Tc.min():.2f} °C after 40 years")
+print(f"cold CO2 case: minimum temperature {Tc.min():.2f} °C after {DEMO_YEARS:g} years")
 save(fig, "fim12_temperature.png")""",
 """md:## Time series
 Injected-phase pore volume in place (saturation × pore volume, summed), and well rates (kg/s per component;
@@ -203,15 +212,15 @@ for name, r in runs.items():
     ph, lab = INJECTED[name]
     s = np.asarray(r["saturation"])[:, :, ph]
     base = s[0]
-    ax[0].plot(YEARS, ((s - base) * PV).sum(1) / PV.sum(), "o-", ms=3, label=f"{name} ({lab})")
+    ax[0].plot(DEMO_REPORT_YEARS, ((s - base) * PV).sum(1) / PV.sum(), "o-", ms=3, label=f"{name} ({lab})")
     bhp = np.asarray(r["bhp"])
-    ax[1].plot(YEARS, bhp[:, 0] / 1e6, "o-", ms=3, label=name)
+    ax[1].plot(DEMO_REPORT_YEARS, bhp[:, 0] / 1e6, "o-", ms=3, label=name)
 ax[0].set_ylabel("injected-phase volume / PV"); ax[1].set_ylabel("INJ bottom-hole pressure (MPa)")
 for a in ax[:2]:
     a.set_xlabel("years"); a.legend(fontsize=8)
 r = runs["CO2-brine"]; q = np.asarray(r["well_mass_rate"])
 for i, c in enumerate(r["component_names"]):
-    ax[2].plot(YEARS[1:], -q[1:, 1, i], "o-", ms=3, label=f"PROD {c}")
+    ax[2].plot(DEMO_REPORT_YEARS[1:], -q[1:, 1, i], "o-", ms=3, label=f"PROD {c}")
 ax[2].set_title("CO2-brine: producer mass rates"); ax[2].set_ylabel("kg/s out"); ax[2].set_xlabel("years"); ax[2].legend(fontsize=8)
 save(fig, "fim12_time_series.png")""",
 """fig, ax = plt.subplots(1, 4, figsize=(16, 3.2))
@@ -220,7 +229,7 @@ for a, (name, r) in zip(ax, runs.items()):
     for w, wn in enumerate(("INJ", "PROD")):
         for i, c in enumerate(r["component_names"]):
             if np.abs(q[1:, w, i]).max() > 1e-6:
-                a.plot(YEARS[1:], q[1:, w, i], "o-" if w == 0 else "s--", ms=3, label=f"{wn} {c}")
+                a.plot(DEMO_REPORT_YEARS[1:], q[1:, w, i], "o-" if w == 0 else "s--", ms=3, label=f"{wn} {c}")
     a.axhline(0, color="k", lw=0.5); a.set_title(name); a.set_xlabel("years"); a.legend(fontsize=7)
 ax[0].set_ylabel("well mass rate (kg/s, + in)")
 save(fig, "fim12_well_rates.png")""",
@@ -231,9 +240,9 @@ saturation above 0.05 (above the initial value for water).""",
 for name, r in runs.items():
     ph, lab = INJECTED[name]
     s = np.asarray(r["saturation"])[:, :, ph]
-    ax[0].plot(YEARS, ((s - s[0]) > 0.05).sum(1), "o-", ms=3, label=name)
+    ax[0].plot(DEMO_REPORT_YEARS, ((s - s[0]) > 0.05).sum(1), "o-", ms=3, label=name)
     p = np.asarray(r["p"])
-    ax[1].plot(YEARS, (p * PV).sum(1) / PV.sum() / 1e6, "o-", ms=3, label=name)
+    ax[1].plot(DEMO_REPORT_YEARS, (p * PV).sum(1) / PV.sum() / 1e6, "o-", ms=3, label=name)
 ax[0].set_ylabel("plume cells (ΔS > 0.05)"); ax[1].set_ylabel("mean pressure (MPa)")
 for a in ax:
     a.set_xlabel("years"); a.legend(fontsize=8)
@@ -254,9 +263,10 @@ for name, fn, title in (("water-oil", "fim_water_oil.gif", "Water injection into
                         ("CO2-brine", "fim_co2_brine.gif", "CO2 injection into brine")):
     ph, lab = INJECTED[name]
     frames = np.asarray(runs[name]["saturation"])[:, :, ph]
-    animate_grid(grid, frames, OUT / fn, times=YEARS, wells=wl, label=lab, units="", clim=(0.0, 0.8),
+    animate_grid(grid, frames, OUT / fn, times=DEMO_REPORT_YEARS, wells=wl, label=lab, units="", clim=(0.0, 0.8),
                  cmap="viridis", z_exaggeration=25.0, title=title, time_label="{:.0f} years",
-                 fps=5, width=720, height=500, hold_last=5, bar_fmt="%.1f")
+                 fps=5, width=720, height=500, hold_last=5, bar_fmt="%.1f",
+                 rotate=DEMO_ROTATE, rotate_deg=DEMO_ROTATE_DEG)
     print(fn, f"{(OUT / fn).stat().st_size / 1e6:.2f} MB")""",
 """md:## Results summary
 The table below is built by the next cell from the run results above (nothing is typed in by hand). Balance
@@ -266,8 +276,8 @@ mass rate.""",
 """def breakthrough(r, frac=0.01):
     q = np.asarray(r["well_mass_rate"]); ic = list(r["component_names"]).index("CO2")
     hit = np.nonzero(-q[1:, 1, ic] > frac * q[1:, 0, ic])[0]
-    return f"{YEARS[1:][hit[0]]:.0f} yr" if hit.size else "not by 40 yr"
-rows = ["| Case | Run time | Steps / cuts / Newton | Worst balance error | Max injected saturation | INJ pressure at 40 yr | CO2 breakthrough | Min temperature |",
+    return f"{DEMO_REPORT_YEARS[1:][hit[0]]:.0f} yr" if hit.size else f"not by {DEMO_YEARS:g} yr"
+rows = [f"| Case | Run time | Steps / cuts / Newton | Worst balance error | Max injected saturation | INJ pressure at {DEMO_YEARS:g} yr | CO2 breakthrough | Min temperature |",
         "|---|---|---|---|---|---|---|---|"]
 for name, r in runs.items():
     ph, lab = INJECTED[name]
@@ -285,14 +295,17 @@ an ILU(0) sweep on all unknowns). The alternative, `linear_solver="direct"`, fac
 sparse LU. If GMRES ever fails to converge, that Newton step falls back to the direct LU automatically and the
 run reports it in `n_linear_fallbacks`.
 
-Both solvers solve the same equations to a tight tolerance (relative residual 1e-8), so the answers should agree
+Both linear solvers solve the same equations to a tight tolerance (relative residual 1e-8), so the answers should agree
 to round-off and the time-step history should be identical. The cell below re-runs the four cases with the direct solver, in parallel
 processes (`subsurfix.parallel.run_cases`, using the same case setup stored in `fluid_cases.py`), and compares
 them with the iterative runs above.""",
 """from fluid_cases import CASES
 from subsurfix.parallel import run_cases
 
-direct = run_cases({k: (f, {"linear_solver": "direct"}) for k, f in CASES.items()}, parallel=True)
+direct = run_cases({k: (f, dict(linear_solver="direct", years=DEMO_YEARS,
+                               rate=DEMO_RATE_M3_S, report_times_s=TIMES,
+                               **(dict(p_range=DEMO_P_RANGE_PA, table_points=DEMO_TABLE_POINTS)
+                                  if k=="CO2-brine" else {}))) for k, f in CASES.items()}, parallel=True)
 rows = ["| Case | Iterative | Direct | GMRES iterations | Fallbacks | Same steps / Newton | Max rel. Δp | Max Δ saturation |",
         "|---|---|---|---|---|---|---|---|"]
 for k in CASES:
@@ -307,13 +320,13 @@ display(Markdown("\\n".join(rows)))
 print(f"direct runs: {direct.processes} processes, wall {direct.wall_seconds:.1f} s "
       f"(sum of case times {sum(direct.seconds.values()):.1f} s)")""",
 """md:How to read the table: the differences are at round-off level (around 1e-11 or smaller), so the
-two solvers give the same answer. The iterative solver is the faster of the two here, and the gap grows with the
+two linear solvers give the same answer. The iterative solver is the faster of the two here, and the gap grows with the
 size of the problem and the number of unknowns per cell. The last line shows the gain from running the four
 cases at once in separate processes instead of one after another.""",
 """md:## Limitations
-- Low injection rate: with unit permeabilities of 0.5–80 mD and an OBL table limited to 50 MPa, injection is
-  kept at 0.008 m³/s, so only about 5 % of the pore volume is injected in 40 years and the plumes stay within
-  a few cells of INJ.
+- The small-demo defaults use 0.008 m³/s for 40 years. Rates, duration and the isothermal CO₂ table are
+  editable in the demo settings cell. The 5–200 MPa numerical table does not extend the 60 MPa
+  Spycher & Pruess (2005) flash validity limit; fallback results are not a validated solution.
 - The black-oil PVT table is synthetic (same shape as the unit tests), not a measured fluid.
 - CO2–brine uses a salt-free mass basis (NaCl is fixed in the brine), with no salt precipitation and constant
   Corey relative permeability without hysteresis.
@@ -371,7 +384,24 @@ kansas(cells[16]),
 kansas(cells[18]),
 "md:## 3D animations (Kansas)\nSame camera, colour scale and wells as the block GIFs.",
 kansas(cells[26]),
-"md:## Whole-model Kansas animations: what you can change\nThe README GIFs of the whole Kansas model (`scripts/kansas_fluids.py` for the three fluid cases and\n`scripts/make_methods_animation.py` for MODFLOW 6 against FIM-OBL) run on the structural grid from\n`examples/kansas_window.py` (`kansas_structural`: 12 layers of 5 m on the mapped top, the south-east block\nwithout wells inactive). Settings you can adjust on the command line:\n\n- Well locations: `--inj \"i,j;i,j\"` and `--prod \"i,j\"` (several wells separated by `;`; the rate is split over\n  the injectors). `--inj`/`--prod` columns must be active.\n- Perforated (open) layers: `--inj-layers 8-11` and `--prod-layers 0-3` (0 = top layer); the MODFLOW 6 well\n  connections use the same layers.\n- Rates: `--rate` (m³/s) and `--case-rates \"oil-gas=...,CO2-brine=...\"`; producer pressure per case with\n  `--case-bhp \"oil-gas=19.5\"` (MPa).\n- Run length and frames: `--years` (one frame every 2 years); `--times \"2:60:2\"` for the methods comparison.\n- MODFLOW 6 well-flow closure: `--mf6-tolerance normal` (or `tight`).\n- OBL table pressure range: `--p-max` (MPa) for the heat comparison; the fluid cases use 5–50 MPa (5–30 MPa for\n  oil-gas), so keep the injector pressure (reported as `inj_bhp_max_MPa`) inside it.
+"""md:## Whole-model Kansas animations: what you can change
+The README GIFs of the whole Kansas model (`scripts/kansas_fluids.py` for the three fluid cases and
+`scripts/make_fem_vs_fim_animation.py` for FVM versus FEM pressure and temperature) run on the structural grid from
+`examples/kansas_window.py` (`kansas_structural`: 12 layers of 5 m on the mapped top, the south-east block
+without wells inactive). Settings you can adjust on the command line:
+
+- Well locations: `--inj "i,j;i,j"` and `--prod "i,j"` (several wells separated by `;`; the rate is split over
+  the injectors). `--inj`/`--prod` columns must be active.
+- Perforated (open) layers: `--inj-layers 8-11` and `--prod-layers 0-3` (0 = top layer); the MODFLOW 6 well
+  connections use the same layers.
+- Rates: `--rate` (m³/s) and `--case-rates "oil-gas=...,CO2-brine=..."`; producer pressure per case with
+  `--case-bhp "oil-gas=19.5"` (MPa).
+- Run length and frames: `--years` (one frame every 2 years); `--times "2:60:2"` for the methods comparison.
+- Separate official MODFLOW 6 external check only (`make_methods_animation.py --external-check`), well-flow closure: `--mf6-tolerance normal` (or `tight`).
+- Operator-table pressure range: `--p-max` (MPa) for the heat comparison. Isothermal CO₂/brine uses
+  `p_range=(5e6, 2e8)` Pa and `table_points=[261, 201]`: 5–200 MPa with 0.75 MPa pressure spacing.
+  Water/oil and thermal CO₂ retain their separate tables; oil/gas uses 5–30 MPa. Table coverage does
+  **not** certify property-model validity or acceptable injection pressure.
 - Colormaps (any matplotlib colormap name): `--cmap` (saturation, default `viridis_bright`: viridis without its dark end) in `kansas_fluids.py`;
   `--cmap-pressure` (default `viridis_bright`) and `--cmap-temperature` (default `cold`) in
   `make_methods_animation.py`; `--background-cmap` (faint porosity base, default `porosity_grey`: darker = tighter rock) in both,
@@ -381,7 +411,33 @@ kansas(cells[26]),
 - Look of the 3D panels: a faint greyscale porosity shell (`background`, `context_opacity`), with only cells whose
   value changed by more than the threshold (`plume`, or `plume_frac` as a fraction of the largest change) drawn in
   colour, more opaque for larger changes. Thresholds: `--p-above-background` (default 3 MPa above the median rise in each frame; `--p-threshold-abs` with `--p-threshold` for a fixed rise, `--p-threshold-frac` for a fraction of the peak), `--t-threshold`
-  (default 2 °C).",
+  (default 2 °C).
+
+### Kansas branching-fault CO₂ comparison controls
+The existing Kansas structural model, not the geometry-preview box, is used by
+`scripts/make_faulted_co2_kansas.py`. It keeps 4656 active cells (22×22×12 with the SE notch),
+INJ (5,10) open layers 8–11 and PROD (9,16) layers 1–3 (zero-based), 0.008 m³/s,
+12 MPa producer BHP, and 100 years / reports every 2 years. FVM results use the FIM-OBL solver.
+
+- `--cache-dir`: separate caches for this matched pair; `--save-npz` / `--from-npz` save or render
+  combined results. A table/setup fingerprint rejects stale caches. Do not mix the old 5–50 MPa cache
+  with a 5–200 MPa run.
+- `--multiplier 1e-4`: the approved no-throw staircase barriers; `--years 100 --frames 50` fixes the
+  approved schedule. Thread cap is eight. These are explicit controls, not permission to change the
+  approved geometry, wells or rate for the featured comparison.
+- Main dip 3.75° SW and branch dip 4.67° NE come from `scripts/kansas_branching_geometry.py`;
+  the branch soles into the main. Plot overlays are smooth geometric planes, while equations use
+  staircase face transmissibilities. No red north–south 56° plane and no FEM multiphase panels.
+- Both cases use the **same** widened pressure table above, also used by the isothermal CO₂ call
+  in `fluid_cases.py`. Widening is a numerical table change, not a new physical model.
+
+**Validation history:** at 0.02 m³/s the widened-table faulted integration returned with 95,402
+property fallbacks and was rejected. A fresh matched pair at **0.008 m³/s** passed with zero
+fallbacks and component balance errors below 1e-5. The reason for lowering the shared rate was
+the 60 MPa property-model limit, **not** absent producer breakthrough. Both cases have CO₂
+at the producer by year 100; a missing faulted breakthrough would also be an acceptable result.
+The executable settings below default to the chosen rate, with the heavy solve disabled.
+""",
 """md:## Results summary (Kansas)
 Built by the next cell from the Kansas runs above (nothing typed in by hand); same definitions as the block summary.""",
 kansas(cells[28]),
@@ -393,7 +449,7 @@ rows = ["| Model | Pore volume (m³) | Median k (mD) |", "|---|---|---|"]
 for mname, R in RES.items():
     rows.append(f"| {mname} | {R['PV']:.3e} | {np.median(R['k_md']):.1f} |")
 display(Markdown("\\n".join(rows)))
-rows = ["| Case | Model | Run time | Steps / cuts | Worst balance error | Max injected saturation | Plume cells | INJ pressure at 40 yr | CO2 breakthrough |",
+rows = [f"| Case | Model | Run time | Steps / cuts | Worst balance error | Max injected saturation | Plume cells | INJ pressure at {DEMO_YEARS:g} yr | CO2 breakthrough |",
         "|---|---|---|---|---|---|---|---|---|"]
 for case in RES["Layered block"]["runs"]:
     for mname, R in RES.items():
@@ -411,7 +467,101 @@ listed above apply to both sections.""",
 ]
 cells = cells + KANSAS
 
+DEMO_SETTINGS_MD = """md:## Editable settings · small notebook demos
+Run this cell before the block and Kansas-window cases. `DEMO_RATE_M3_S` is reservoir-volume
+injection rate; `DEMO_YEARS` and the report interval control their shared schedule.
+`DEMO_P_RANGE_PA` bounds the isothermal CO₂/brine interpolation table in pascals;
+`DEMO_TABLE_POINTS` gives pressure/composition axis counts. The defaults preserve 0.75 MPa
+pressure spacing. These imported defaults are shared with `fluid_cases.py`; the linear-solver
+comparison below passes your edits explicitly, rather than silently using module defaults.
+The water/oil, black-oil and thermal cases retain their own constitutive tables.
+`DEMO_ROTATE` switches the small-demo GIF camera sweep on/off; `DEMO_ROTATE_DEG` is the
+total sweep in degrees (40, the previous animation default). These visual controls are unrelated to
+`DEMO_RATE_M3_S`.
+
+**Physical limit:** the Spycher & Pruess (2005) CO₂/brine flash is valid only to **60 MPa
+(600 bar)**. A 200 MPa table is numerical coverage, not physical certification. The original
+5–50 MPa table was too tight for the faulted whole-model injector; widening it produced
+95,402 property fallbacks and that run was rejected. Zero producer CO₂ is not a rejection
+criterion. The optional whole-model comparison has separate settings and is off by default."""
+DEMO_SETTINGS_CODE = """from fluid_cases import (DEMO_RATE_M3_S as _DEFAULT_DEMO_RATE,
+    DEMO_YEARS as _DEFAULT_DEMO_YEARS, DEMO_REPORT_INTERVAL_YEARS as _DEFAULT_DEMO_INTERVAL,
+    DEMO_P_RANGE_PA as _DEFAULT_DEMO_P_RANGE, DEMO_TABLE_POINTS as _DEFAULT_DEMO_TABLE,
+    demo_report_times)
+DEMO_RATE_M3_S = _DEFAULT_DEMO_RATE          # 0.008 m³/s: both small models, all four fluids
+DEMO_YEARS = _DEFAULT_DEMO_YEARS            # 40 years
+DEMO_REPORT_INTERVAL_YEARS = _DEFAULT_DEMO_INTERVAL  # 2 years
+DEMO_P_RANGE_PA = _DEFAULT_DEMO_P_RANGE     # (5e6, 2e8): isothermal CO₂/brine only
+DEMO_TABLE_POINTS = list(_DEFAULT_DEMO_TABLE)       # [261, 201]
+DEMO_ROTATE = True                          # camera sweep on/off for small-demo GIFs
+DEMO_ROTATE_DEG = 40.0                      # total degrees over each demo clip (previous default)
+"""
+FAULT_SETTINGS_MD = """md:## Editable settings · whole Kansas branching-fault comparison
+This is the existing 22×22×12 Kansas structural model with its inactive SE notch, not the
+10×10 window above. The following named variables are passed to the **same runner API**
+as `scripts/make_faulted_co2_kansas.py`; geometry is imported, not duplicated.
+Both cases share the rate, pressure table and report schedule. `FAULT_MULTIPLIER` scales
+cross-plane face transmissibilities without throw; smooth plot planes remain distinct from
+those staircase faces. Well columns and open layers are zero-based; `N_THREADS` is capped at eight.
+`ROTATE` turns the 3D camera sweep on/off, and `ROTATE_DEG` sets its total degrees over the clip.
+`VIEW_DIR` is the starting direction from the model toward the camera (x east, y north, z up),
+chosen a bit more from the SSE than the previous ESE view; `ROTATE_DEG = 35` is sized so the clip
+still ends near the previous almost-east angle. These are visual controls, not injection-rate
+settings: `RATE_M3_S` remains the shared reservoir-volume rate.
+
+The earlier 0.02 m³/s faulted run was rejected after 95,402 property fallbacks, not because a
+plume missed the producer. The chosen lower shared rate is **0.008 m³/s**: both Mac cases passed the fallback and
+mass-balance checks, with peak reported injector BHP 21.27 MPa / 43.21 MPa (no faults / two faults),
+below the 60 MPa flash limit. Table coverage remains 5–200 MPa with 261×201 points.
+The 43.21 MPa faulted BHP still exceeds an illustrative lithostatic estimate (~25.46 MPa);
+no fracture opening or geomechanical safety is modeled. **Do not enable the solve casually:** `RUN_FAULTED_COMPARISON = False`
+means this section performs no model setup, native solve, timing or rendering. If explicitly
+enabled later, the runner rejects fallback values, poor mass balance and injector BHP ≥60 MPa.
+It does not reject absent producer breakthrough. No FEM multiphase panels are available."""
+FAULT_SETTINGS_CODE = """RUN_FAULTED_COMPARISON = False
+RATE_M3_S = 0.008
+P_RANGE_PA = (5e6, 2e8)
+TABLE_POINTS = [261, 201]
+YEARS = 100
+REPORT_INTERVAL_YEARS = 2
+FAULT_MULTIPLIER = 1e-4
+INJ = (5, 10)
+INJ_LAYERS = tuple(range(8, 12))
+PROD = (9, 16)
+PROD_LAYERS = tuple(range(1, 4))
+PROD_BHP_PA = 12e6
+N_THREADS = 8
+ROTATE = True        # camera sweep on/off
+ROTATE_DEG = 35      # total degrees over the clip; ends near the previous almost-east view
+VIEW_DIR = (0.88, -0.60, 0.75)  # starting model-to-camera direction (x east, y north, z up)
+COMPARISON_CACHE = OUT / "kansas_branching_faults"
+"""
+FAULT_RUN_CODE = """if RUN_FAULTED_COMPARISON:
+    import sys
+    _examples = Path.cwd() if Path("fluid_cases.py").is_file() else Path.cwd() / "examples"
+    _root = _examples.resolve().parent
+    sys.path.insert(0, str(_root / "scripts"))
+    from make_faulted_co2_kansas import run_comparison
+    _frames = int(YEARS / REPORT_INTERVAL_YEARS)
+    if _frames < 1 or _frames * REPORT_INTERVAL_YEARS != YEARS:
+        raise ValueError("Use a run length divisible by the report interval")
+    comparison_result = run_comparison(cache_dir=COMPARISON_CACHE,
+        rate=RATE_M3_S, p_range=P_RANGE_PA, table_points=TABLE_POINTS,
+        years=YEARS, frames=_frames, fault_multiplier=FAULT_MULTIPLIER,
+        inj=INJ, prod=PROD, inj_layers=INJ_LAYERS, prod_layers=PROD_LAYERS,
+        prod_bhp=PROD_BHP_PA, n_threads=N_THREADS, render_output=True,
+        rotate=ROTATE, rotate_deg=ROTATE_DEG, view_dir=VIEW_DIR,
+        gif=OUT / "faulted_co2_kansas.gif", still=OUT / "faulted_co2_kansas.png")
+else:
+    print("Kansas matched-pair solve is OFF. Edit settings and explicitly opt in only after reviewing validity.")
+"""
+cells[3:3] = [DEMO_SETTINGS_MD, DEMO_SETTINGS_CODE]
+cells += [FAULT_SETTINGS_MD, FAULT_SETTINGS_CODE, FAULT_RUN_CODE]
+
+
 n = nbf.v4.new_notebook()
 n.metadata["kernelspec"] = {"name": "python3", "display_name": "Python 3", "language": "python"}
 n.cells = [nbf.v4.new_markdown_cell(c[3:]) if c.startswith("md:") else nbf.v4.new_code_cell(c.strip()) for c in cells]
+for i, c in enumerate(n.cells):
+    c.id = f"nb12-{i:03d}-" + hashlib.sha256(c.source.encode()).hexdigest()[:8]
 nbf.write(n, HERE / "12_multiphase_fluids.ipynb")

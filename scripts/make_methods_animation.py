@@ -1,4 +1,8 @@
-"""Render the README methods-comparison GIF: MODFLOW 6 against FIM-OBL on a water doublet.
+"""Render one row of Kansas FVM pressure and temperature panels by default.
+
+The FVM results use the FIM-OBL solver. A MODFLOW-style control-volume finite-difference solver is also available.
+Use --external-check only for the separate official MODFLOW 6 comparison.
+The featured existing GIF can be cropped without rerunning using feature_kansas_fvm.py.
 
 Both codes run the same case on the Kansas Geological Survey property model read by
 ``examples/kansas_window.py`` (22 x 22 x 12 cells of 500 m x 500 m x 5 m whose layers follow the structural top;
@@ -6,7 +10,7 @@ the south-east block without well control is inactive): 30 degC water injected i
 reservoir through injector INJ (6, 8), in the south, 19 m down-dip of the producer, open only in its three
 most porous layers (1-3, porosity 0.28, about 24 D·m); producer PROD (8, 13), near the centre and 2.7 km away, open
 in its three most porous layers (2-4, porosity 0.21-0.28, about 12.6 D·m) and held at 20 MPa. Wells, open layers, rate, report times,
-MODFLOW 6 tolerance and the OBL pressure range are command-line options.
+MODFLOW 6 tolerance and the operator-table pressure range are command-line options.
 
 * MODFLOW 6 (through FloPy and ``subsurfix.modflow_heat``): steady groundwater flow (GWF) with multi-aquifer
   wells, then groundwater energy transport (GWE); constant water density and viscosity.
@@ -146,9 +150,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(ROOT / "image" / "methods_compare.gif"))
     ap.add_argument("--still", default=None)
+    ap.add_argument("--external-check", action="store_true", help="render the separate official MODFLOW 6 external comparison (not the featured FVM-only row)")
     ap.add_argument("--rate", type=float, default=RATE, help="injection rate (m3/s)")
-    ap.add_argument("--p-max", type=float, default=50.0, help="OBL table pressure ceiling (MPa)")
-    ap.add_argument("--p-points", type=int, default=41, help="OBL table pressure nodes")
+    ap.add_argument("--p-max", type=float, default=50.0, help="Operator-table pressure ceiling (MPa)")
+    ap.add_argument("--p-points", type=int, default=41, help="Operator-table pressure nodes")
     ap.add_argument("--mf6-tolerance", default="normal", choices=["tight", "normal"])
     ap.add_argument("--times", default=None,
                     help="report/frame times in years, e.g. '0.5:2:0.5,3:20:1' (start:stop:step ranges, or values)")
@@ -217,15 +222,21 @@ def main():
           "plume_above_median": None if a.p_threshold_frac or a.p_threshold_abs else a.p_above_background, "ref": BHP / 1e6}  # change from the initial 20 MPa
     to = {"label": "Temperature", "units": "°C", "clim": (T_INJ, T_RES), "cmap": a.cmap_temperature, "bar_fmt": "%.0f",
           "plume": a.t_threshold, "ref": T_RES}
-    panels = [("MODFLOW 6: pressure", Pm, {**po, "bar": False}), ("MODFLOW 6: temperature", Tm, {**to, "bar": False}),
-              ("FIM-OBL: pressure", P, {**po, "bar": True}), ("FIM-OBL: temperature", T, {**to, "bar": True})]
+    panels = [("FVM: pressure", P, {**po, "bar": True}), ("FVM: temperature", T, {**to, "bar": True})]
+    shape = (1, 2)
+    header = f"Mississippian interval, Kansas: FVM cold-water injection, {a.rate:g} m³/s"
+    if a.external_check:
+        panels = [("USGS MODFLOW 6: pressure", Pm, {**po, "bar": False}),
+                  ("USGS MODFLOW 6: temperature", Tm, {**to, "bar": False})] + panels
+        shape = (2, 2)
+        header = f"Mississippian interval, Kansas: FVM vs USGS MODFLOW 6 external check, {a.rate:g} m³/s"
     n_act = int(np.asarray(bm["active"]).sum())
-    animate_layered(grid, panels, a.out, times=a.years, wells=wl, shape=(2, 2), panel_size=(480, 380), section=sec,
+    animate_layered(grid, panels, a.out, times=a.years, wells=wl, shape=shape, panel_size=(480, 380), section=sec,
                     context_opacity=0.22, **background_args(bm, a),
                     background_cmap=a.background_cmap,
                     time_label="{:.1f} years" if np.any(np.mod(a.years, 1)) else "{:.0f} years", fps=4,
                     still=a.still or str(Path(a.out).with_suffix(".png")),
-                    header=f"Mississippian interval, Kansas: cold-water doublet, MODFLOW 6 vs FIM-OBL, {a.rate:g} m³/s",
+                    header=header,
                     footer=(f"Vertical exaggeration 40x   model 11 x 11 km, 60 m thick, 12 layers on the structural top, "
                             f"{n_act} active cells\n30 °C water into 80 °C rock; blue: injector, red: producer at 20 MPa, "
                             f"{sec['length'] / 1000:.1f} km apart, open layers in labels\n"

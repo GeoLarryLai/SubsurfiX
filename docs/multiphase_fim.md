@@ -1,7 +1,23 @@
-# Experimental fully implicit multiphase flow (OBL)
+# Experimental multiphase FVM solver
 
-Status: **experimental** in 0.1.1. The existing IMPES path (`run_two_phase`,
-`run_impes`) is unchanged and remains the supported solver.
+The two in-package FVM solvers are the open-DARTS-inspired FIM-OBL solver and the
+MODFLOW-inspired control-volume finite-difference solver (Rust translation). The latter is not the
+official USGS MODFLOW 6 program. Where an example explicitly invokes `mf6` through FloPy, that is
+an outside check with official USGS MODFLOW 6. FEM uses the OpenGeoSys-style continuous Galerkin
+finite-element solver, including experimental coupled water pressure and temperature; complete
+multiphase simulation remains FVM-only.
+
+
+FVM is the spatial method; FIM-OBL is the SubsurfiX solver described here, inspired by open-DARTS.
+MODFLOW 6 is a different FVM-family solver using a control-volume finite-difference scheme, not
+FIM-OBL or FEM. FEM here denotes a continuous Galerkin finite-element solver (OpenGeoSys-style);
+its available water/heat physics is not yet a replacement for all the multiphase cases below.
+
+The FVM solver described here is the **FIM-OBL solver**: fully implicit method (FIM) with
+operator-based linearization (OBL). These are solver details, not alternative spatial methods.
+
+Status: introduced as **experimental** in 0.1.1. The existing implicit-pressure, explicit-saturation
+FVM routines (`run_two_phase`, `run_impes`) remain available; their public API names are unchanged.
 
 Code: `crates/sx-core/src/flow/implicit.rs` (solver, OBL table, wells),
 `crates/sx-core/src/flow/fim_physics.rs` (dead-oil and black-oil physics),
@@ -10,7 +26,7 @@ Code: `crates/sx-core/src/flow/implicit.rs` (solver, OBL table, wells),
 
 ## Method
 
-* Cell-centred finite volumes, two-point flux approximation (TPFA), reusing
+* Cell-centred FVM, two-point flux approximation, reusing
   the transmissibilities of `FlowModel`.
 * Fully implicit Newton on the natural OBL state ω = [p, z_1 … z_{nc-1}]
   (overall **mass** fractions). Residual per cell and component:
@@ -99,7 +115,7 @@ the publications listed below (open-DARTS latest release when accessed on 2026-1
 
 ## Compared with open-DARTS
 
-Same: FV/TPFA, fully implicit, OBL operator form with multilinear
+Same: FVM with a two-point flux approximation, fully implicit coupling, OBL operator form with multilinear
 interpolation and table-derived Jacobian, phase-potential upwinding,
 Peaceman wells with a BHP unknown.
 

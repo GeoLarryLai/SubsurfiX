@@ -9,7 +9,7 @@ use sx_core::{SxError, SxResult};
 
 /// Parsed command line.
 #[derive(Debug, Parser)]
-#[command(name = "subsurfix", version, about = "SubsurfiX well-log engine")]
+#[command(name = "subsurfix", version, about = "SubsurfiX well-log toolkit")]
 pub struct Cli {
     /// More log output (debug level).
     #[arg(short, long, global = true, conflicts_with = "quiet")]

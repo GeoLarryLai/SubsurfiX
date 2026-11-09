@@ -193,6 +193,12 @@ class FlowModel:
         poro: npt.NDArray[np.float64],
     ) -> FlowModel: ...
     @staticmethod
+    def from_bulk_mesh(
+        nodes: npt.NDArray[np.float64], cells: npt.NDArray[np.int64],
+        perm: npt.NDArray[np.float64], poro: npt.NDArray[np.float64],
+        active: list[bool] | None = None,
+    ) -> FlowModel: ...
+    @staticmethod
     def from_corner_point(
         grid: CornerPointGrid,
         perm: npt.NDArray[np.float64],
@@ -438,6 +444,25 @@ def run_fim_thermal_water(
     dt_min: float = ...,
     max_newton: int = 20,
     tol: float = 1e-6,
+    linear_solver: str = "iterative",
+) -> dict[str, Any]: ...
+def run_fem_thermal_water(
+    model: FlowModel,
+    wells: list[dict[str, Any]],
+    p0: npt.NDArray[np.float64],
+    t0: npt.NDArray[np.float64],
+    times: list[float],
+    injection_temperature: list[float] | None = None,
+    rock: dict[str, float] | None = None,
+    c_rock: float = 0.0,
+    p_ref: float = ...,
+    gravity: float = 0.0,
+    dt_init: float = ...,
+    dt_max: float = ...,
+    dt_min: float = ...,
+    max_iter: int = 30,
+    tol: float = 1e-6,
+    stabilization: float = 1.0,
     linear_solver: str = "iterative",
 ) -> dict[str, Any]: ...
 
