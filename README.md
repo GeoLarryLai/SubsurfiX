@@ -17,6 +17,10 @@
 ```bash
 pip install subsurfix
 ```
+or from `conda-forge` repository with `conda`:
+```bash
+conda install subsurfix
+```
 
 Python 3.12 or newer. Prebuilt wheels are for macOS arm64; on other systems pip builds from source, which needs
 Rust, a C/C++ compiler and libclang. Building from a clone, and installing the [MODFLOW 6](https://www.usgs.gov/software/modflow-6-usgs-modular-hydrologic-model) (the U.S. Geological Survey modular hydrologic model; Langevin et al., 2017) program
