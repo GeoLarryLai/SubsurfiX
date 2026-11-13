@@ -389,3 +389,7 @@ The MODFLOW 6 comparisons were run with [MODFLOW 6](https://www.usgs.gov/softwar
 6.7.0 and [FloPy](https://github.com/modflowpy/flopy) 3.11.0 (both by the USGS). 3D animations use
 [PyVista](https://pyvista.org) 0.49.2.
 Details and data credits are in [`NOTICE`](NOTICE) and the files in `docs/`.
+
+## License
+
+Code: **AGPL-3.0-or-later**. You are free to use, modify, and share it; anyone distributing modified code or running a modified version as a network service must share its source under the same license.
