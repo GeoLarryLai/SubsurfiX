@@ -404,7 +404,8 @@ without wells inactive). Settings you can adjust on the command line:
   **not** certify property-model validity or acceptable injection pressure.
 - Colormaps (any matplotlib colormap name): `--cmap` (saturation, default `viridis_bright`: viridis without its dark end) in `kansas_fluids.py`;
   `--cmap-pressure` (default `viridis_bright`) and `--cmap-temperature` (default `cold`) in
-  `make_methods_animation.py`; `--background-cmap` (faint porosity base, default `porosity_grey`: darker = tighter rock) in both,
+  `make_methods_animation.py`; `--cmap-pressure` (default `turbo`) and `--cmap-temperature` (default `RdYlBu_r`) in
+  `make_fem_vs_fim_animation.py`; `--background-cmap` (faint porosity base, default `porosity_grey`: darker = tighter rock) in both,
   `--no-background` to turn the base off;
   `scripts/make_porosity_image.py --cmap` (porosity picture, default `copper`). In Python, `animate_layered`
   takes `cmap` (or a per-panel `cmap` option) and `background_cmap`, as names or `Colormap` objects.

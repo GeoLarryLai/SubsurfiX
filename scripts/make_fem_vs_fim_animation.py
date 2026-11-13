@@ -232,9 +232,10 @@ def main():
                     help="--check limit on the largest producer temperature difference over the report times (degC)")
     ap.add_argument("--check-balance", type=float, default=1e-4,
                     help="--check limit on the water and energy balance error of either solver (relative)")
-    ap.add_argument("--cmap-pressure", default="viridis_bright", help="pressure colormap (any matplotlib name)")
-    ap.add_argument("--cmap-temperature", default="cold",
-                    help="temperature colormap (any matplotlib name; default 'cold': dark blue = coldest, pale = 80 degC)")
+    ap.add_argument("--cmap-pressure", default="turbo",
+                    help="pressure colormap (any matplotlib name; default turbo)")
+    ap.add_argument("--cmap-temperature", default="RdYlBu_r",
+                    help="temperature colormap (any matplotlib name; default RdYlBu_r: 30 degC cold water blue, 80 degC rock red)")
     ap.add_argument("--p-threshold", type=float, default=3.0,
                     help="colour cells whose pressure changed by more than this (MPa) from the initial 20 MPa")
     ap.add_argument("--p-above-background", type=float, default=3.0,
@@ -295,9 +296,10 @@ def main():
     lo, hi = BHP / 1e6, float(np.nanpercentile(np.concatenate([P_fim.ravel(), P_fem.ravel()]), 99.9))
     po = {"label": "Pressure", "units": "MPa", "clim": (lo, hi), "cmap": a.cmap_pressure, "bar_fmt": "%.1f",
           "plume": a.p_threshold, "plume_frac": a.p_threshold_frac,
-          "plume_above_median": None if a.p_threshold_frac or a.p_threshold_abs else a.p_above_background, "ref": BHP / 1e6}  # change from the initial 20 MPa
+          "plume_above_median": None if a.p_threshold_frac or a.p_threshold_abs else a.p_above_background, "ref": BHP / 1e6,  # change from the initial 20 MPa
+          "bar_ticks": [20, 25, 30, 35, 39.7]}
     to = {"label": "Temperature", "units": "°C", "clim": (T_INJ, T_RES), "cmap": a.cmap_temperature, "bar_fmt": "%.0f",
-          "plume": a.t_threshold, "ref": T_RES}
+          "plume": a.t_threshold, "ref": T_RES, "bar_ticks": [30, 40, 50, 60, 70, 80]}
     panels = [("FVM: pressure", P_fim, {**po, "bar": False}), ("FEM: pressure", P_fem, {**po, "bar": True}),
               ("FVM: temperature", T_fim, {**to, "bar": False}), ("FEM: temperature", T_fem, {**to, "bar": True})]
     n_act = int(np.asarray(grid.active).sum())

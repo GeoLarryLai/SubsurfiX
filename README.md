@@ -220,6 +220,9 @@ The FVM cache records **107.3 s** for its original run; these are not a same-mac
 - 0.05 m³/s of 30 °C water into an 80 °C reservoir; injector (6, 8), open layers 1–3; producer (8, 13), layers 2–4, held at 20 MPa.
 - No gravity; same water/rock constitutive model and 0.25-year maximum time step; FEM streamline-upwind stabilization factor 1.
 - Forty report times, every five years through year 200; the GIF includes its final-frame hold.
+- Pressure colour: shared 20.0–39.7 MPa `turbo` scale; cells within 3 MPa of the median rise in each frame stay on
+  the grey permeability base. Temperature colour: shared 30–80 °C `RdYlBu_r` scale (blue = 30 °C injected water,
+  red = 80 °C initial rock); cells within 2 °C of the initial 80 °C stay grey.
 
 Renderer: `scripts/make_fem_vs_fim_animation.py`. `--fvm-from-npz` reuses the original FVM heat cache
 and computes FEM only; `--save-fem-npz` and `--save-npz` retain the new results; `--from-npz` renders
