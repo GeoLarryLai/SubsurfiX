@@ -417,7 +417,7 @@ without wells inactive). Settings you can adjust on the command line:
 The existing Kansas structural model, not the geometry-preview box, is used by
 `scripts/make_faulted_co2_kansas.py`. It keeps 4656 active cells (22×22×12 with the SE notch),
 INJ (5,10) open layers 8–11 and PROD (9,16) layers 1–3 (zero-based), 0.008 m³/s,
-12 MPa producer BHP, and 100 years / reports every 2 years. FVM results use the FIM-OBL solver.
+20 MPa producer BHP (matching the 20 MPa initial reservoir pressure), and 100 years / reports every 2 years. FVM results use the FIM-OBL solver.
 
 - `--cache-dir`: separate caches for this matched pair; `--save-npz` / `--from-npz` save or render
   combined results. A table/setup fingerprint rejects stale caches. Do not mix the old 5–50 MPa cache
@@ -510,10 +510,11 @@ still ends near the previous almost-east angle. These are visual controls, not i
 settings: `RATE_M3_S` remains the shared reservoir-volume rate.
 
 The earlier 0.02 m³/s faulted run was rejected after 95,402 property fallbacks, not because a
-plume missed the producer. The chosen lower shared rate is **0.008 m³/s**: both Mac cases passed the fallback and
-mass-balance checks, with peak reported injector BHP 21.27 MPa / 43.21 MPa (no faults / two faults),
-below the 60 MPa flash limit. Table coverage remains 5–200 MPa with 261×201 points.
-The 43.21 MPa faulted BHP still exceeds an illustrative lithostatic estimate (~25.46 MPa);
+plume missed the producer. The chosen lower shared rate is **0.008 m³/s**, and the producer is
+held at **20 MPa**, the same as the initial reservoir pressure. The featured pair passed the
+fallback and mass-balance checks, with peak reported injector BHP 27.60 MPa / 52.31 MPa
+(no faults / two faults), below the 60 MPa flash limit. Table coverage remains 5–200 MPa with 261×201 points.
+The 52.31 MPa faulted BHP still exceeds an illustrative lithostatic estimate (~25.46 MPa, about 2.05×);
 no fracture opening or geomechanical safety is modeled. **Do not enable the solve casually:** `RUN_FAULTED_COMPARISON = False`
 means this section performs no model setup, native solve, timing or rendering. If explicitly
 enabled later, the runner rejects fallback values, poor mass balance and injector BHP ≥60 MPa.
@@ -529,7 +530,7 @@ INJ = (5, 10)
 INJ_LAYERS = tuple(range(8, 12))
 PROD = (9, 16)
 PROD_LAYERS = tuple(range(1, 4))
-PROD_BHP_PA = 12e6
+PROD_BHP_PA = 20e6
 N_THREADS = 8
 ROTATE = True        # camera sweep on/off
 ROTATE_DEG = 35      # total degrees over the clip; ends near the previous almost-east view

@@ -52,7 +52,7 @@ def setup(a):
     inj, prod = tuple(getattr(a,"inj",(5,10))), tuple(getattr(a,"prod",(9,16)))
     inj_layers = list(getattr(a,"inj_layers",range(8,12)))
     prod_layers = list(getattr(a,"prod_layers",range(1,4)))
-    rate = float(getattr(a,"rate",.008)); bhp = float(getattr(a,"prod_bhp",1.2e7))
+    rate = float(getattr(a,"rate",.008)); bhp = float(getattr(a,"prod_bhp",20e6))
     p_range = tuple(getattr(a,"p_range",(5e6,2e8)))
     table_points = list(getattr(a,"table_points",(261,201)))
     if not (rate > 0 and 0 < p_range[0] < p_range[1] and len(table_points)==2 and min(table_points)>=2):
@@ -191,14 +191,16 @@ def render(b,cases,a):
     wl=wells_for_plot(bm,grid,[inj],[prod])
     sec=section_wells(bm,inj,prod,wl[0].extra["open"],wl[1].extra["open"]);sec["height"]=210
     surfaces,lines=smooth_surfaces(b)
-    lo=20.;hi=max(float(c["P"][:,bm["active"]].max()) for c in cases.values())
     panels=[]
     for row,name in enumerate(["no_faults","two_faults"]):
         for col,key in enumerate(["P","S"]):
-            opts=dict(label="Pressure" if key=="P" else "CO₂ saturation",units="MPa" if key=="P" else "",clim=(lo,hi) if key=="P" else (0,1),
-                cmap="viridis_bright",bar_fmt="%.1f",ref=20 if key=="P" else 0,
-                plume=.02,section_alpha=.85)
-            if key=="P":opts["positive_change_only"]=True
+            if key=="P":
+                opts=dict(label="Pressure",units="MPa",clim=(20.0,47.6),cmap="turbo",bar_fmt="%.1f",
+                    ref=20.0,plume=1.5,positive_change_only=True,cell_opacity=.80,section_alpha=.85,
+                    bar_ticks=[20,25,30,40,47.6])
+            else:
+                opts=dict(label="CO₂ saturation",units="",clim=(0,1),cmap="viridis_bright",bar_fmt="%.1f",
+                    ref=0,plume=.02,section_alpha=.85)
             if row:opts.update(fault_surfaces=surfaces,fault_section=lines,fault_opacity=.65)
             panels.append((TITLES[2*row+col],cases[name][key],opts))
     animate_layered(grid,panels,a.gif,times=b["times"],wells=wl,shape=(2,2),panel_size=(640,360),section=sec,
@@ -208,7 +210,7 @@ def render(b,cases,a):
         footer="Kansas 22 × 22 × 12; 4656 active cells; 11 × 11 km × 60 m; vertical exaggeration 40×; same KGS properties and wells.\n"
         f"INJ {inj}, layers {b['params']['inj_layers']}; PROD {prod}, layers {b['params']['prod_layers']}, {b['wells'][1]['bhp']/1e6:g} MPa BHP; 50 °C brine.\n"
         f"FVM results use the FIM-OBL solver; staircase multiplier {a.multiplier:g}; smooth pink planes; pressure and saturation, not temperature.\n"
-        "Pressure colour: cell P > 20 MPa only; no-fault cells stay below 20 MPa (well BHP is distinct). Pink: smooth 3D planes and section traces.")
+        "Pressure colour: shared 20.0–47.6 MPa turbo scale; cells at or below 21.5 MPa stay on the grey permeability base. Pink: smooth 3D planes and section traces.")
     from PIL import Image,ImageSequence
     im=Image.open(a.gif);frames=[f.copy() for f in ImageSequence.Iterator(im)];dur=[250]*len(frames);dur[-1]=1500
     frames[0].save(a.gif,save_all=True,append_images=frames[1:],duration=dur,loop=0,optimize=False)
@@ -216,7 +218,7 @@ def render(b,cases,a):
 
 def main():
     ap=argparse.ArgumentParser(description=__doc__);ap.add_argument("--cache-dir",type=Path,required=True)
-    ap.add_argument("--rate",type=float,default=.008);ap.add_argument("--years",type=float,default=100);ap.add_argument("--frames",type=int,default=50);ap.add_argument("--multiplier",type=float,default=1e-4)
+    ap.add_argument("--rate",type=float,default=.008);ap.add_argument("--years",type=float,default=100);ap.add_argument("--frames",type=int,default=50);ap.add_argument("--multiplier",type=float,default=1e-4);ap.add_argument("--prod-bhp",type=float,default=20e6,dest="prod_bhp")
     ap.add_argument("--save-npz",type=Path);ap.add_argument("--from-npz",type=Path);ap.add_argument("--validate-only",action="store_true")
     ap.add_argument("--no-rotate",dest="rotate",action="store_false",help="fixed camera");ap.add_argument("--rotate-deg",type=float,default=35.,help="total camera azimuth sweep in degrees when rotating");ap.add_argument("--view-dir",type=float,nargs=3,default=[.88,-.60,.75],metavar=("X","Y","Z"),help="starting direction from model to camera (x east, y north, z up)");ap.add_argument("--gif",type=Path,default=ROOT/"image/faulted_co2_kansas.gif");ap.add_argument("--still",type=Path,default=ROOT/"image/faulted_co2_kansas.png")
     return _execute(ap.parse_args())
@@ -254,7 +256,7 @@ def _execute(a):
 def run_comparison(*, cache_dir, rate=.008, p_range=(5e6,2e8), table_points=(261,201),
                    years=100, frames=50, fault_multiplier=1e-4, inj=(5,10), prod=(9,16),
                    inj_layers=tuple(range(8,12)), prod_layers=tuple(range(1,4)),
-                   prod_bhp=12e6, n_threads=8, render_output=False, gif=None, still=None,
+                   prod_bhp=20e6, n_threads=8, render_output=False, gif=None, still=None,
                    rotate=True, rotate_deg=35., view_dir=(.88,-.60,.75)):
     """Explicit notebook/API entry point; call only behind the notebook's opt-in flag.
 

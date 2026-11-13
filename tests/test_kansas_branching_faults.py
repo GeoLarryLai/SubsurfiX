@@ -24,7 +24,7 @@ class KansasBranchingTests(unittest.TestCase):
             for key in points:
                 p=g[key];self.assertAlmostEqual(plane_z(g[name],p[0],p[1]),p[2],places=8)
     def test_wells_and_fluid_setup(self):
-        p=self.b["params"];self.assertEqual(p["rate_m3_s"],.02);self.assertEqual(p["wells"][1]["bhp"],1.2e7)
+        p=self.b["params"];self.assertEqual(p["rate_m3_s"],.02);self.assertEqual(p["wells"][1]["bhp"],20e6)
         self.assertEqual(p["wells"][0]["cells"],[5+22*(10+22*k) for k in range(8,12)])
         self.assertEqual(p["wells"][1]["cells"],[9+22*(16+22*k) for k in range(1,4)])
         self.assertEqual(p["gravity"],9.80665);self.assertEqual(p["temperature_K"],323.15)

@@ -471,6 +471,13 @@ def _change_alpha(d, thr, dmax, relative=False):
     return 0.55 + 0.45 * np.clip((np.asarray(d, float) - thr) / (dmax - thr), 0.0, 1.0)
 
 
+def _colorbar_tick_values(o, n):
+    """Tick locations in data units. ``bar_ticks`` overrides the default evenly spaced ticks."""
+    if o.get("bar_ticks") is not None:
+        return np.asarray(o["bar_ticks"], float)
+    return np.linspace(*o["clim"], n)
+
+
 def _colorbar_image(o, w, h, vertical=False):
     """Matplotlib colour bar for a panel: ticks below (or right), title above, nothing overlapping."""
     import io
@@ -498,7 +505,7 @@ def _colorbar_image(o, w, h, vertical=False):
     else:
         sm = ScalarMappable(norm=Normalize(*o["clim"]), cmap=o["cmap"])
         cb = fig.colorbar(sm, cax=cax, orientation="horizontal", format=o.get("bar_fmt", "%.2f"))
-        cb.set_ticks(np.linspace(*o["clim"], 5))
+        cb.set_ticks(_colorbar_tick_values(o, 5))
     cb.ax.tick_params(labelsize=7, pad=1, length=2)
     title = f"{o['label']} ({o['units']})" if o.get("units") else o["label"]
     fig.text(0.5, 0.97, title, ha="center", va="top", fontsize=8, color="#222222")
@@ -575,7 +582,7 @@ def _section_image(sec, v, v0, o, w, h, background=None, bg_clim=None, dmax=None
     from matplotlib.cm import ScalarMappable
     from matplotlib.colors import Normalize
     cb = fig.colorbar(ScalarMappable(norm=Normalize(*o["clim"]), cmap=o["cmap"]), cax=cax, format=o.get("bar_fmt", "%.2f"))
-    cb.set_ticks(np.linspace(*o["clim"], 3))
+    cb.set_ticks(_colorbar_tick_values(o, 3))
     cb.ax.tick_params(labelsize=6, pad=1, length=2)
     ax.tick_params(labelsize=7)
     ends = sec.get("ends")
@@ -656,6 +663,9 @@ def animate_layered(
     ``positive_change_only=True`` in a panel masks depletion rather than colouring abs(change).
     ``fault_surfaces`` draws smooth depth-negative surfaces in that panel, scaled by the same vertical exaggeration.
     ``plume_frac`` sets the threshold as a fraction of the largest change in the run instead of ``plume``.
+    ``bar_ticks`` optionally sets the colour-bar tick locations in data units.
+    ``cell_opacity`` sets the opacity of a panel drawn without ``plume``, and scales the changed-cell opacities
+    when ``plume`` is set.
 
     ``background`` (one value per cell, e.g. porosity) colours the faint shell in greyscale instead of plain grey,
     and is drawn as grey cells under the change overlay in the cross-sections. ``background_cmap`` sets its colormap
@@ -727,6 +737,8 @@ def animate_layered(
                "height": 0.07, "width": 0.6, "title_font_size": 13, "label_font_size": 11}
         style = {"scalars": sname, "cmap": o["cmap"], "clim": o["clim"], "show_edges": True, "edge_color": edge_color,
                  "line_width": 0.3}
+        if o.get("cell_opacity") is not None and o["plume"] is None:
+            style["opacity"] = float(o["cell_opacity"])
         a_pl = None
         if o["plume"] is None:
             a_ctx = pl.add_mesh(mesh.copy(), show_scalar_bar=False, **style)
@@ -741,7 +753,10 @@ def animate_layered(
                                                     manifold_edges=False), color="#777777", line_width=1.0)
             a_ctx = None
             a_pl = []  # changed cells in opacity classes, one actor per class
-            for q, op in enumerate(ALPHA_LEVELS):
+            ops = ALPHA_LEVELS
+            if o.get("cell_opacity") is not None:
+                ops = tuple(float(o["cell_opacity"]) * a for a in ALPHA_LEVELS)
+            for q, op in enumerate(ops):
                 a_pl.append(pl.add_mesh(mesh.copy(), show_scalar_bar=False,
                                         specular=0.0, ambient=0.25, diffuse=0.8, opacity=op, **style))
         state.append((mesh, sname, a_ctx, a_pl))

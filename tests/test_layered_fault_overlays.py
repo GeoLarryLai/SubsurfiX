@@ -1,5 +1,5 @@
 """Layered render-path checks, with no VTK window or scientific solve."""
-import sys,tempfile,unittest,json,contextlib,io
+import sys,tempfile,unittest,json,contextlib,io,inspect
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock,patch
@@ -82,5 +82,17 @@ class LayeredOverlayTests(unittest.TestCase):
         import inspect
         ps=inspect.signature(viz.animate_layered).parameters
         self.assertEqual(ps["view_dir"].default,(1.0,-0.35,0.75));self.assertEqual(ps["rotate_deg"].default,20.0)
+
+    def test_bar_ticks_and_cell_opacity_hooks(self):
+        o={"clim":(20.0,47.6),"bar_ticks":[20,25,30,40,47.6]}
+        ticks=viz._colorbar_tick_values(o,5)
+        self.assertEqual(list(ticks),[20.,25.,30.,40.,47.6])
+        even=viz._colorbar_tick_values({"clim":(20.0,47.6)},5)
+        self.assertAlmostEqual(even[0],20.0)
+        self.assertAlmostEqual(even[-1],47.6)
+        self.assertEqual(len(even),5)
+        ps=inspect.signature(viz.animate_layered).parameters
+        self.assertIn("view_dir",ps)
+
 
 if __name__=="__main__":unittest.main()

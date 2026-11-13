@@ -80,7 +80,7 @@ class NotebookSettingsTests(unittest.TestCase):
 
     def test_notebook_rotation_controls(self):
         settings=next(c for c in self.code if c.startswith("RUN_FAULTED_COMPARISON ="));ns={"OUT":Path("outputs")};exec(settings,ns)
-        self.assertIs(ns["RUN_FAULTED_COMPARISON"],False);self.assertIs(ns["ROTATE"],True);self.assertEqual(ns["ROTATE_DEG"],35);self.assertEqual(ns["VIEW_DIR"],(0.88,-0.60,0.75));self.assertEqual(ns["RATE_M3_S"],.008)
+        self.assertIs(ns["RUN_FAULTED_COMPARISON"],False);self.assertIs(ns["ROTATE"],True);self.assertEqual(ns["ROTATE_DEG"],35);self.assertEqual(ns["VIEW_DIR"],(0.88,-0.60,0.75));self.assertEqual(ns["RATE_M3_S"],.008);self.assertEqual(ns["PROD_BHP_PA"],20e6)
         gate=next(c for c in self.code if c.startswith("if RUN_FAULTED_COMPARISON:"));self.assertIn("rotate=ROTATE, rotate_deg=ROTATE_DEG, view_dir=VIEW_DIR",gate)
         demo=next(c for c in self.code if c.startswith("from fluid_cases import (DEMO_RATE"));dn={};exec(demo,dn)
         self.assertIs(dn["DEMO_ROTATE"],True);self.assertEqual(dn["DEMO_ROTATE_DEG"],40.);self.assertEqual(dn["DEMO_RATE_M3_S"],.008)

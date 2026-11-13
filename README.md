@@ -232,24 +232,28 @@ both columns without solving again. The earlier one-row FVM-only crop remains in
 
 <p align="center"><img src="image/faulted_co2_kansas.gif" alt="Kansas FVM pressure and CO2 saturation: no faults above two branching no-throw faults" width="100%"></p>
 
-<sub>MacBook Pro (Apple M4 Pro, 48 GB), conda work, 8-thread cap · Kansas 22×22×12 · CO₂/brine, 0.008 m³/s, 100 yr · solver wall time: no faults 48.0 s; two faults 56.7 s; Δ(two − none) = +8.7 s. Same 5–200 MPa table, 261×201 points. Excludes common mesh setup, caching and rendering; one sequential run each, not a repeated benchmark.</sub>
+<sub>Kansas 22×22×12 · CO₂/brine, 0.008 m³/s, producer held at 20 MPa, 100 yr · same 5–200 MPa table, 261×201 points.</sub>
 
 *The FVM results use the FIM-OBL solver. Both rows use the Kansas structural model with the same wells and CO₂-into-brine setup. The lower row adds two no-throw branching staircase barriers (main 3.75° SW; branch 4.67° NE soling into the main; multiplier 10⁻⁴). Pink/magenta surfaces in the faulted 3D views and matching section traces draw the approved gentle-dip planes smoothly, not the staircase faces. This shows pressure and saturation, not temperature. FEM is omitted because faulted multiphase FEM is not available.*
 
 **Highlights (no faults / two faults)**
-- Peak reported injector BHP: **21.272 / 43.215 MPa**; final producer-cell pressure: **12.239 / 12.388 MPa**.
-- CO₂ reaches the producer in both cases by year 100; maximum CO₂-rich saturation in the producer's open cells is
-  **0.726 / 0.655**. Reaching the producer is a result, not an acceptance criterion.
-- Component balance errors (CO₂ / water, relative to net transferred mass): **3.95×10⁻⁹ / 5.51×10⁻⁸** without faults
-  and **1.68×10⁻⁹ / 6.00×10⁻⁹** with faults; no property or linear-solver fallbacks in either run.
-- Pressure panels colour cell pressure above the 20 MPa initial pressure (shared 20–39.08 MPa `viridis_bright` scale,
-  0.02 MPa threshold; drawdown stays grey). No-fault cells stay below 20 MPa (at most 18.856 MPa), so that row shows
-  no pressure plume; its 21.272 MPa is the injector **well BHP**, not a cell pressure.
+- Producer BHP is **20 MPa**, matching the 20 MPa initial reservoir pressure; the injector rate is **0.008 m³/s**.
+- No-faults cell pressures are **20.116–24.617 MPa**, peaking at year 6 (injector BHP **27.603 MPa**) and easing to
+  **22.380 MPa** by year 100. CO₂ reaches the producer at year **56** (final CO₂-rich saturation **0.670**).
+- Two-faults injector-side cell pressure peaks at **47.565 MPa** at year 54 (injector BHP **52.311 MPa**), easing to
+  **44.504 MPa** (BHP **49.037 MPa**) by year 100. The producer side stays near **20.2–24.6 MPa** (mean **21.05–21.27 MPa**).
+  CO₂ reaches the producer at year **82** (final CO₂-rich saturation **0.598**).
+- Peak reported injector BHP: **27.603 / 52.311 MPa**; final producer-cell pressure: **20.304 / 20.395 MPa**.
+  Reaching the producer is a result, not an acceptance criterion.
+- Component balance errors (CO₂ / water, relative to net transferred mass): **5.54×10⁻⁹ / 1.73×10⁻⁸** without faults
+  and **2.46×10⁻⁹ / 1.07×10⁻⁸** with faults; no property or linear-solver fallbacks in either run.
+- Pressure panels share a **20.0–47.6 MPa** `turbo` scale across both models, with cells at or below **21.5 MPa**
+  left on the grey permeability base.
 
 **Key settings**
 - Whole KGS structural model: 22 × 22 × 12 cells of 500 × 500 × 5 m (11 × 11 km, 60 m thick), 4656 active cells;
   KGS porosity, permeability and structural top unchanged; vertical exaggeration 40×.
-- Injector (5, 10), open in layers 8–11, 0.008 m³/s of CO₂; producer (9, 16), layers 1–3, 12 MPa BHP (zero-based
+- Injector (5, 10), open in layers 8–11, 0.008 m³/s of CO₂; producer (9, 16), layers 1–3, 20 MPa BHP (zero-based
   indices). 50 °C, 1 mol/kg brine; initial pressure 20 MPa; gravity on; 100 years, reported every two years.
 - Faults: no throw and no cut-plane mesh; a staircase transmissibility multiplier of 10⁻⁴ on 477 of 13,052
   connections. The pink surfaces and section traces draw the geometric fault planes.
@@ -261,12 +265,13 @@ both columns without solving again. The earlier one-row FVM-only crop remains in
 - The Spycher & Pruess (2005) CO₂–brine flash is valid to **60 MPa (600 bar)**; the wider 5–200 MPa table only keeps
   the numerical iterations inside the tabulated range. At 0.02 m³/s the faulted case left the valid property range
   (95,402 property fallbacks), so both cases share the lower rate of 0.008 m³/s.
-- The faulted 43.215 MPa injector BHP is well above a rough lithostatic estimate of ~25.46 MPa at the mean open depth
-  (~1.04 km, 2500 kg/m³ bulk density). That estimate is illustrative, not a site measurement or an operating limit.
-  The model has no fracture opening or geomechanics, so this result does not establish field feasibility.
+- The faulted 52.311 MPa injector BHP is well above a rough lithostatic estimate of ~25.46 MPa at the mean open depth
+  (~1.04 km, 2500 kg/m³ bulk density; about 2.05× that estimate). That estimate is illustrative, not a site measurement
+  or an operating limit. The model has no fracture opening or geomechanics, so this result does not establish field
+  feasibility.
 
 [Notebook 12](examples/12_multiphase_fluids.ipynb) exposes these as editable Python settings (`RATE_M3_S`,
-`P_RANGE_PA`, `TABLE_POINTS`, `YEARS`, `FAULT_MULTIPLIER`, wells and layers, `N_THREADS`, `VIEW_DIR`, `ROTATE`,
+`PROD_BHP_PA`, `P_RANGE_PA`, `TABLE_POINTS`, `YEARS`, `FAULT_MULTIPLIER`, wells and layers, `N_THREADS`, `VIEW_DIR`, `ROTATE`,
 `ROTATE_DEG`) and passes them to `run_comparison` in `scripts/make_faulted_co2_kansas.py`. The whole-Kansas solve is
 off by default (`RUN_FAULTED_COMPARISON = False`); separate `DEMO_*` settings drive the small notebook demos, and the
 script's `--from-npz` option re-renders from saved results without solving.
