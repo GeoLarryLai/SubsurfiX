@@ -4,7 +4,7 @@
 from pathlib import Path
 
 import nbformat as nbf
-from _build_notebooks import SETUP, nb  # importing does not rewrite 01-08
+from _build_notebooks import SETUP, nb  # importing does not rewrite 03-08
 
 HERE = Path(__file__).resolve().parent
 
@@ -141,7 +141,7 @@ SNAP,
 """md:# Real-world case: the Kansas (KGS) model on its structural top
 
 The doublet of the README FVM-versus-FEM water pressure/temperature comparison (`scripts/make_fem_vs_fim_animation.py`) on real geology: the whole
-22 × 22 × 12 Kansas Geological Survey (KGS) property model of notebooks 01–04 (500 × 500 × 5 m cells, 11 × 11 km
+22 × 22 × 12 Kansas Geological Survey (KGS) property model of notebooks 03–04 (500 × 500 × 5 m cells, 11 × 11 km
 × 60 m) with its layers following the structural top; the south-east block without well control is inactive. The
 grid has no faults, so the finite-element solver accepts it.
 

@@ -9,9 +9,9 @@ Two small files used by the "Real-world case" sections of examples 09, 10, 12 an
 | `property_model.npz` | Property model written by notebook 04 on that grid: porosity `phi`, clean-facies flag `clean`, and `ok`, the ordinary-kriging porosity estimate (one value per cell, i fastest, then j, then layer from the top). `ok` is not a mask and the examples do not use it |
 
 Source: public well logs and formation tops from the Kansas Geological Survey (KGS),
-<https://www.kgs.ku.edu/>, as fetched by `scripts/fetch_open_data.sh` and processed by notebooks 01–04
-(log QC and gap fill, correlation, gridding and upscaling, property modelling). The files only hold numeric
-arrays derived from that data; rerun notebooks 01–04 on the KGS download to regenerate them.
+<https://www.kgs.ku.edu/>, as fetched by `scripts/fetch_open_data.sh` and processed by the SubsurfiX pipeline and notebooks 03–04
+(gridding and upscaling, property modelling). The files only hold numeric
+arrays derived from that data; rerun notebooks 03–04 on the KGS download to regenerate them.
 
 Permeability is not stored: the examples derive it from porosity as in notebook 05,
 k = 10^(−1 + 14 φ) mD (φ clipped to 0.03–0.30), doubled in clean cells, kv/kh = 0.1.

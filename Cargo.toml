@@ -9,7 +9,7 @@ members = [
 [workspace.package]
 edition = "2021"
 license = "AGPL-3.0-or-later"
-version = "0.2.0"
+version = "0.2.1"
 publish = false
-description = "A tool for automation in subsurface geological/petrophysical analysis and geomodeling workflows"
+description = "Automated workflows for subsurface geological analysis to reservoir modeling, with a Rust core and a Python interface."
 authors = ["Larry Syu-Heng Lai"]

@@ -356,7 +356,7 @@ SNAP,
 """md:# Real-world case: Kansas (KGS) property window
 
 The same four runs on real geology: a 10 × 10 × 12 window (columns i = 7–16, j = 7–16, all 12 layers, 1200
-cells of 500 × 500 × 5 m) of the Kansas Geological Survey (KGS) property model built in notebooks 01–04. The
+cells of 500 × 500 × 5 m) of the Kansas Geological Survey (KGS) property model built in notebooks 03–04. The
 two small files it reads are committed in `examples/data/kansas_window/` (see the README there), so no download
 is needed.
 

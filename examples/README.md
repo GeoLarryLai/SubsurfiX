@@ -15,13 +15,11 @@ FEM here has one OpenGeoSys-style continuous Galerkin finite-element solver for 
 water pressure and temperature. Notebook 15 compares FVM with FEM. Notebook 10 retains the existing
 split SubsurfiX `run_heat` routine; it must not be mislabelled as a FIM-OBL run.
 
-One notebook per workflow step. Run them in order; 03–05 and 08 reuse files written by earlier notebooks. 09–12 are self-contained: 09, 10 and 12 first run a layered block model built in code (`block_model.py`), then the same workflow in a "Real-world case" section on the Kansas (KGS) property model committed in `data/kansas_window/` (read by `kansas_window.py`): 09 and 10 use the whole model (22 × 22 × 12 cells, 11 × 11 km × 60 m), 12 a 10 × 10 × 12 window of it. 13 builds its faulted corner-point grid in code and compares the full 3D FVM solver with CO₂ VE on it; 14 reuses the block model, the whole Kansas model and a smaller version of the faulted block.
+One notebook per workflow step. Run them in order; 04, 05 and 08 reuse files written by earlier notebooks. 09–12 are self-contained: 09, 10 and 12 first run a layered block model built in code (`block_model.py`), then the same workflow in a "Real-world case" section on the Kansas (KGS) property model committed in `data/kansas_window/` (read by `kansas_window.py`): 09 and 10 use the whole model (22 × 22 × 12 cells, 11 × 11 km × 60 m), 12 a 10 × 10 × 12 window of it. 13 builds its faulted corner-point grid in code and compares the full 3D FVM solver with CO₂ VE on it; 14 reuses the block model, the whole Kansas model and a smaller version of the faulted block.
 
 | Notebook | What it shows |
 |---|---|
-| 01_log_qc_and_gap_fill | Pipeline run on 60 KGS wells: QC and machine-learning gap fill |
-| 02_well_correlation | DTW well correlation onto a relative-geologic-time axis |
-| 03_grid_and_upscaling | Corner-point grid following a mapped top; log upscaling to cells |
+| 03_grid_and_upscaling | Pipeline run on 60 KGS wells; corner-point grid following a mapped top; log upscaling to cells |
 | 04_property_modelling | Variogram, kriging, SGS, SIS and ML propagation |
 | 05_water_injection | Two-phase water injection with the built-in FVM solver |
 | 06_heat_doublet_and_ogs_export | Heat transport check, geothermal doublet, OpenGeoSys VTU export |
@@ -35,10 +33,10 @@ One notebook per workflow step. Run them in order; 03–05 and 08 reuse files wr
 | 14_flow_diagnostics | Flow diagnostics (time of flight, tracer partitions, well pairs, F–Φ, Lorenz, sweep) on the block model, the Kansas KGS window and a faulted corner-point block, with a run_tracer vs TOF comparison |
 | 15_fem_vs_fim_heat | Experimental continuous Galerkin FEM water + heat solver (OpenGeoSys-style) (`run_fem_thermal_water`) against FVM on the heat doublet, on a layered block model and the Kansas KGS structural model |
 
-Data: `scripts/fetch_open_data.sh` (KGS wells, Wister) and `scripts/fetch_force2020.sh` (FORCE 2020).
+Data: `scripts/fetch_open_data.sh` (KGS wells, Wister).
 Environment variables: `SX_EXAMPLE_PROJECT` (KGS project folder, default `kgs_project/`), `SX_EXAMPLE_OUT`
 (figures and intermediate files, default `outputs/`), `SX_WISTER` (Wister data folder).
-To regenerate the notebooks: `python _build_notebooks.py` (01–08), `_build_nb09.py`, `_build_nb10.py`, `_build_nb12.py`, `_build_nb13.py`, `_build_nb14.py` and `_build_nb15.py`, then execute them with `jupyter nbconvert --execute --inplace`.
+To regenerate the notebooks: `python _build_notebooks.py` (03–08), `_build_nb09.py`, `_build_nb10.py`, `_build_nb12.py`, `_build_nb13.py`, `_build_nb14.py` and `_build_nb15.py`, then execute them with `jupyter nbconvert --execute --inplace`.
 
 ## Setup
 
@@ -61,7 +59,7 @@ import subsurfix as sx
 toml = sx.write_demo_project("sx_demo")   # small synthetic project, no data needed
 sx.prepare_edges(toml)                    # headers, tops, surveys -> tables
 p = sx.Project(toml)
-p.run()                                   # ingest -> QC -> align -> normalize -> fill -> correlate -> export
+p.run()                                   # run every pipeline stage and export
 print(p.status().to_pandas())
 logs, tops = p.logs(well=1), p.tops()
 ```

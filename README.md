@@ -10,7 +10,7 @@
 > [!WARNING]
 > **SubsurfiX** is under active development, and many functions are still experimental and not fully validated. Please use with caution.
 
-**SubsurfiX** is developed to automate workflows for subsurface geological analysis and reservoir modeling, including (1) machine-learning (ML) or statistically assisted well-log quality control (QC) and data-gap prediction, (2) core-to-log calibration and 3D property modeling, (3) Dynamic Time Warping (DTW) assisted stratigraphic correlation between wells, and (4) flow and heat simulations for injection–production purposes. The core is written in [Rust](https://www.rust-lang.org/) and wrapped in a Python skin.
+**SubsurfiX** is developed to automate workflows for subsurface analysis, including machine-learning (ML) assisted stratigraphic model building, 3D property modeling, and flow and heat simulations for injection–production purposes.
 
 ## Installation
 
@@ -33,7 +33,7 @@ import subsurfix as sx
 
 toml = sx.write_demo_project("sx_demo")   # a small made-up project, no data needed
 sx.prepare_edges(toml)
-sx.Project(toml).run()                    # clean, fill, correlate and export the logs
+sx.Project(toml).run()                    # run the demo project
 ```
 
 To start on your own logs, `sx.init_project("my_project", las_dirs=["las"])` writes a settings file you can edit.
@@ -48,10 +48,6 @@ Lai, L.S.-H. (2026) SubsurfiX. *Zenodo*, [https://doi.org/10.5281/zenodo.2383200
 ![3D porosity and permeability model built from 60 Kansas wells](image/hero_3d_porosity_model.png)
 *3D property model from 60 Kansas wells (11 × 11 km, 12 layers, vertical exaggeration 40×), the end product of the log-to-model workflow. Left: porosity. Right: permeability (log scale), derived from porosity (k = 10^(−1 + 14 φ) mD, doubled in clean rock; notebook 05).*
 
-- **Log clean-up and gap filling.** Read LAS files and well surveys, mark bad sections, and fill gaps with rules
-  and machine learning ([LightGBM](https://lightgbm.readthedocs.io)). Every value carries a code that says
-  whether it was measured or filled.
-- **Well correlation.** Match the same beds from well to well automatically, solving all wells together.
 - **Grids and properties.** Build regular grids, or corner-point grids with faults (the GRDECL format used by
   industry reservoir tools), and fill them with porosity and rock type by kriging, simulation or machine learning,
   with low/mid/high (P10/P50/P90) cases. Rock types: sandstone, shale, limestone, dolomite and cherty carbonate.
@@ -61,20 +57,6 @@ Lai, L.S.-H. (2026) SubsurfiX. *Zenodo*, [https://doi.org/10.5281/zenodo.2383200
   mesh files (`.vtu`).
 
 <table>
-<tr>
-<td><img src="image/ex_qc_gap_fill.png" alt="Raw, cleaned and gap-filled logs"></td>
-</tr>
-<tr>
-<td>One Kansas well: the raw log (grey), what the clean-up kept (black) and the filled samples (red).</td>
-</tr>
-<tr>
-<td><img src="image/ex_well_correlation.png" alt="West-east well correlation section"></td>
-</tr>
-<tr>
-<td>Eight Kansas wells, west to east, with the formation tops picked by the Kansas Geological Survey (KGS). Left: by
-depth, colour bands join the same interval from well to well. Right: the same wells on relative geological time from
-the dynamic time warping (DTW) correlation, where the beds line up.</td>
-</tr>
 <tr>
 <td><img src="image/ex_property_maps.png" alt="Porosity maps of one layer, six panels"></td>
 </tr>
@@ -92,7 +74,7 @@ See notebook 04.</td>
 </tr>
 </table>
 
-Each step has an executed notebook on open data from the KGS and FORCE 2020; see
+Each step has an executed notebook on open data from the KGS; see
 [`examples/README.md`](examples/README.md).
 
 ## Fundamentals
@@ -179,18 +161,6 @@ model uses the top surface.
 preconditioner and algebraic multigrid (Notay, 2010), falling back to a direct solve if needed
 (`linear_solver="direct"` forces it; same answers, slower). `subsurfix.parallel.run_cases` runs several cases in
 parallel.
-
-**Well correlation.** SubsurfiX uses the dynamic time warping (DTW) algorithm to correlate wells by placing all of
-them on a shared relative geologic time axis (Wheeler and Hale, 2014).
-- Formation tops act as fixed tie points that the match must honour, an idea shown by Samant et al. (2025). All the
-  well-to-well pairwise matches between formation tops follow Lai et al. (2026) and Samant et al. (2025). Picks that
-  disagree with nearby wells are flagged for checking instead of being moved.
-- Finer sub-horizons are suggested by looking for repeated patterns at several scales in the preprocessed log,
-  following Sylvester (2023).
-- All pairwise DTW matches across this network are then solved together as one least-squares problem to find the
-  correlation consensus. SubsurfiX first links each well to its nearest neighbours (k-nearest neighbours, kNN) and
-  to its Delaunay neighbours. A minimum spanning tree (Kruskal, 1956) keeps the whole field connected, and a robust
-  Tukey biweight (Beaton and Tukey, 1974) reweights each match, so a poor match between two wells is down-weighted.
 
 ### FVM versus FEM: Kansas water-injection pressure and temperature
 
@@ -352,21 +322,7 @@ or the temperature change is. Details: `scripts/kansas_fluids.py`; a fast small 
 - Notay, Y. (2010). An aggregation-based algebraic multigrid method. *Electronic Transactions on Numerical
   Analysis* 37, 123–146. <https://etna.ricam.oeaw.ac.at/volumes/2001-2010/vol37/abstract.php?pages=123-146>
 
-**Well logs, correlation and property modelling**
-- Gonzalez, K., et al. (2023). Machine learning workflow for log data. TGS technical library.
-  <https://www.tgs.com/technical-library/machinelearningworkflowforlogdata>
-- Wheeler, L., Hale, D. (2014). Simultaneous correlation of multiple well logs. *SEG Technical Program Expanded
-  Abstracts 2014*. <https://doi.org/10.1190/segam2014-0227.1>
-- Sylvester, Z. (2023). Automated multi-well stratigraphic correlation and model building using relative
-  geologic time. *Basin Research*. <https://doi.org/10.1111/bre.12787>
-- Samant, R., et al. (2025). Enhancing the accuracy of dynamic time warping by integrating stratigraphic
-  constraints. *Paleoceanography and Paleoclimatology*. <https://doi.org/10.1029/2024PA005082>
-- Lai, L. S.-H., Sylvester, Z., Covault, J. A., Gomberg, J. S., Nieminski, N. M. (2026). Reproducible
-  event-bed correlation with uncertainty: pyCoreRelator. *Sedimentology*. <https://doi.org/10.1111/sed.70163>
-- Kruskal, J. B. (1956). On the shortest spanning subtree of a graph and the traveling salesman problem.
-  *Proceedings of the American Mathematical Society* 7(1), 48–50. <https://doi.org/10.1090/S0002-9939-1956-0078686-7>
-- Beaton, A. E., Tukey, J. W. (1974). The fitting of power series, meaning polynomials, illustrated on
-  band-spectroscopic data. *Technometrics* 16(2), 147–185. <https://doi.org/10.1080/00401706.1974.10489171>
+**Property modelling**
 - Daly, C. (2021). An application of an embedded model estimator to a synthetic nonstationary reservoir model.
   *Frontiers in Artificial Intelligence* 4. <https://doi.org/10.3389/frai.2021.624697>
 - Daly, C. (2022). An embedded model estimator for non-stationary random functions using multiple secondary
@@ -382,8 +338,6 @@ or the temperature change is. Details: `scripts/kansas_fluids.py`; a fast small 
 
 **Data sources**
 - Kansas Geological Survey (KGS), well logs and formation tops. <https://www.kgs.ku.edu/>
-- Bormann, P., et al. (2020). FORCE 2020 well log and lithofacies dataset for machine learning competition.
-  Zenodo. <https://doi.org/10.5281/zenodo.4351155>
 
 ## Acknowledgements
 

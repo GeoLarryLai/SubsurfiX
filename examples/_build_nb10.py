@@ -4,7 +4,7 @@
 from pathlib import Path
 
 import nbformat as nbf
-from _build_notebooks import SETUP, nb  # importing does not rewrite 01-08
+from _build_notebooks import SETUP, nb  # importing does not rewrite 03-08
 
 HERE = Path(__file__).resolve().parent
 cells = [
@@ -105,7 +105,7 @@ SNAP,
 """md:# Real-world case: the whole Kansas (KGS) property model
 
 The same doublet on real geology: the whole 22 × 22 × 12 Kansas Geological Survey (KGS) property model built in
-notebooks 01–04 (5808 cells of 500 × 500 × 5 m, 11 × 11 km × 60 m); the same model and wells as the README
+notebooks 03–04 (5808 cells of 500 × 500 × 5 m, 11 × 11 km × 60 m); the same model and wells as the README
 animation. The two small files it reads are committed in `examples/data/kansas_window/` (see the README there).
 
 - Porosity from the notebook 04 property model, clipped to 0.03–0.30.

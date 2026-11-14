@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "subsurfix"
 dynamic = ["version"]
-description = "A tool for automation in subsurface geological/petrophysical analysis and geomodeling workflows"
+description = "Automated workflows for subsurface geological analysis to reservoir modeling, with a Rust core and a Python interface."
 authors = [{ name = "Larry Syu-Heng Lai" }]
 requires-python = ">=3.12"
 license = "AGPL-3.0-or-later"
@@ -24,7 +24,7 @@ dependencies = [
     "imageio>=2.31",
     "omf>=1.0.1,<2",
 ]
-keywords = ["well logs", "petrophysics", "stratigraphic correlation", "geostatistics", "reservoir simulation", "geomodeling"]
+keywords = ["geostatistics", "stratigraphic modeling", "property modeling", "reservoir simulation", "geomodeling"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",

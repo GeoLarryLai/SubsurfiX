@@ -134,7 +134,7 @@ SNAP,
 """md:# Real-world case: the whole Kansas (KGS) property model
 
 The same workflow on real geology: the whole 22 × 22 × 12 Kansas Geological Survey (KGS) property model built in
-notebooks 01–04 (5808 cells, 11 × 11 km × 60 m; the porosity model of the README figure). The two small files it reads are
+notebooks 03–04 (5808 cells, 11 × 11 km × 60 m; the porosity model of the README figure). The two small files it reads are
 committed in `examples/data/kansas_window/` (see the README there), so no download is needed.
 
 - Porosity from the notebook 04 property model, clipped to 0.03–0.30.

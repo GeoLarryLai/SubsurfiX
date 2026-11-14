@@ -1,6 +1,12 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 # Changelog
 
+## [0.2.1] - 2026-11-13
+
+- Shorter project description in the README, PyPI page, package metadata and citation file.
+- Example notebooks 01 and 02 and the FORCE 2020 helper files are no longer in the repository; notebook 03 now
+  runs the pipeline itself before building the grid.
+
 ## [0.2.0] - 2026-11-08
 
 - Experimental continuous Galerkin finite-element (FEM) solver for coupled water flow and heat, in the style of
